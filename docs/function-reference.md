@@ -271,30 +271,7 @@ Validate that deploy_path_parent is properly configured.
 klytron_validate_deploy_path_parent();
 ```
 
-## 🚀 Deployment Flow Functions
 
-### Flow Configuration
-
-#### `klytron_deploy_flow(): array`
-Get the standard deployment flow tasks.
-
-```php
-$tasks = klytron_deploy_flow();
-```
-
-#### `klytron_deploy_flow_minimal(): array`
-Get the minimal deployment flow tasks.
-
-```php
-$tasks = klytron_deploy_flow_minimal();
-```
-
-#### `klytron_deploy_flow_php(): array`
-Get the PHP-specific deployment flow tasks.
-
-```php
-$tasks = klytron_deploy_flow_php();
-```
 
 ## 📋 Common Usage Patterns
 
@@ -389,99 +366,7 @@ Set the application domain for deployment configuration.
 klytron_set_domain('myapp.com');
 ```
 
-## 🔄 Deployment Flow Functions
 
-### Standard Deployment Flows
-
-#### `klytron_deploy_flow(): array`
-
-Get the standard deployment flow for Laravel applications.
-
-**Returns:** (array) Array of deployment tasks
-
-**Example:**
-```php
-$tasks = klytron_deploy_flow();
-// Use in custom deployment configuration
-```
-
-#### `klytron_deploy_flow_minimal(): array`
-
-Get the minimal deployment flow for basic applications.
-
-**Returns:** (array) Array of minimal deployment tasks
-
-**Example:**
-```php
-$tasks = klytron_deploy_flow_minimal();
-// Use for simple deployments
-```
-
-#### `klytron_deploy_flow_php(): array`
-
-Get the PHP-specific deployment flow.
-
-**Returns:** (array) Array of PHP deployment tasks
-
-**Example:**
-```php
-$tasks = klytron_deploy_flow_php();
-// Use for PHP applications
-```
-
-### Laravel-Specific Flows
-
-#### `klytron_laravel_deploy_flow(): array`
-
-Get the full Laravel deployment flow with all features.
-
-**Returns:** (array) Array of Laravel deployment tasks
-
-#### `klytron_laravel_deploy_flow_minimal(): array`
-
-Get the minimal Laravel deployment flow.
-
-**Returns:** (array) Array of minimal Laravel tasks
-
-#### `klytron_laravel_deploy_flow_api(): array`
-
-Get the Laravel API deployment flow.
-
-**Returns:** (array) Array of Laravel API deployment tasks
-
-### Yii2-Specific Flows
-
-#### `klytron_yii2_deploy_flow(): array`
-
-Get the full Yii2 deployment flow.
-
-**Returns:** (array) Array of Yii2 deployment tasks
-
-#### `klytron_yii2_deploy_flow_minimal(): array`
-
-Get the minimal Yii2 deployment flow.
-
-**Returns:** (array) Array of minimal Yii2 tasks
-
-#### `klytron_yii2_deploy_flow_with_backup(): array`
-
-Get the Yii2 deployment flow with backup support.
-
-**Returns:** (array) Array of Yii2 deployment tasks with backup
-
-### PHP-Specific Flows
-
-#### `klytron_php_deploy_flow(): array`
-
-Get the PHP deployment flow.
-
-**Returns:** (array) Array of PHP deployment tasks
-
-#### `klytron_php_deploy_flow_minimal(): array`
-
-Get the minimal PHP deployment flow.
-
-**Returns:** (array) Array of minimal PHP tasks
 
 ## 🔍 Utility Functions
 

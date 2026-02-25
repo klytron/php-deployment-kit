@@ -646,38 +646,35 @@ vendor/bin/dep rollback:list
 
 ### Creating Custom Tasks
 
-You can create custom tasks using the `klytron_add_task()` function:
+Use standard Deployer `task()` syntax:
 
 ```php
 // Add custom task
-klytron_add_task('deploy:custom', function () {
+task('deploy:custom', function () {
     run('echo "Running custom task"');
-    run('php artisan custom:command');
-}, [
-    'description' => 'Run custom deployment task',
-    'dependencies' => ['deploy:update_code'],
-]);
+    run('{{bin/php}} {{release_or_current_path}}/artisan custom:command');
+})->desc('Run custom deployment task');
 ```
 
 ### Task Dependencies
 
-Tasks can depend on other tasks:
+Tasks can depend on other tasks or deployer primitives:
 
 ```php
-klytron_add_task('deploy:custom', function () {
+task('deploy:custom', function () {
     // Task implementation
-}, [
-    'dependencies' => ['deploy:update_code', 'deploy:vendors'],
-]);
+});
+// (Dependencies are usually handled via hooks or explicit lists rather than a dependencies array in Deployer 7)
 ```
 
 ### Task Hooks
 
-Tasks can be hooked to deployment events:
+Hook your custom tasks into the deployment flow:
 
 ```php
 // Add hook
-klytron_add_hook('after:deploy', 'deploy:custom');
+after('deploy:symlink', 'deploy:custom');
+before('deploy:vendors', 'deploy:custom_check');
 ```
 
 ## 🎯 Task Examples
