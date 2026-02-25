@@ -1,0 +1,162 @@
+<?php
+/**
+ * General Project Deployment Configuration
+ * 
+ * This template uses the Klytron Deployer Library
+ * Updated for the new framework-agnostic version of the package
+ * Customize the values below for your project
+ * 
+ * @author Michael K. Laweh (klytron) (https://www.klytron.com)
+ */
+
+namespace Deployer;
+
+///////////////////////////////////////////////////////////////////////////////
+// INCLUDE KLYTRON DEPLOYER LIBRARY
+///////////////////////////////////////////////////////////////////////////////
+
+// Include the Klytron Deployer Library (framework-agnostic core)
+// Option 1: If installed via Composer (recommended)
+require 'vendor/klytron/php-deployment-kit/src/DeploymentKit.php';
+
+// Option 2: If using git submodule
+// require_once __DIR__ . '/deployment-kit/deployment-kit.php';
+
+// Option 3: Include framework-specific recipe if needed
+// For Laravel projects:
+// require 'vendor/klytron/php-deployment-kit/recipes/laravel.php';
+// For Yii2 projects:
+// require 'vendor/klytron/php-deployment-kit/recipes/yii2.php';
+
+///////////////////////////////////////////////////////////////////////////////
+// PROJECT-SPECIFIC CONFIGURATION
+///////////////////////////////////////////////////////////////////////////////
+
+// Configure application using Klytron library
+klytron_configure_app(
+    'your-project-name',                    // Application name
+    'git@github.com:user/your-project.git', // Repository URL
+    [
+        'keep_releases' => 3,               // Number of releases to keep
+        'default_timeout' => 1800,          // Deployment timeout (30 minutes)
+    ]
+);
+
+// Configure deployment paths
+klytron_set_paths(
+    '/var/www',     // Parent directory
+    '/var/www/html'       // Public HTML path
+);
+
+// Set PHP version (customize as needed)
+klytron_set_php_version('php8.3');
+
+// Configure host
+klytron_configure_host('your-server.com', [
+    'remote_user' => 'root',
+    'branch' => 'main',
+    'http_user' => 'www-data',
+    'http_group' => 'www-data',
+    'labels' => ['stage' => 'production'],
+]);
+
+///////////////////////////////////////////////////////////////////////////////
+// PROJECT-SPECIFIC SHARED FILES/DIRECTORIES
+///////////////////////////////////////////////////////////////////////////////
+
+// Configure shared files (customize for your project)
+klytron_configure_shared_files([
+    '.env',                    // Environment configuration (if using)
+    'config.php',              // Configuration file (if using)
+    'public/.htaccess',        // Web server configuration (if customized)
+]);
+
+// Configure shared directories (customize for your project)
+klytron_configure_shared_dirs([
+    'storage',                 // Application storage (logs, cache, sessions)
+    'logs',                    // Application logs
+    'cache',                   // Application cache
+    'uploads',                 // User uploaded files (if applicable)
+    'data',                    // Application data
+]);
+
+// Configure writable directories (customize for your project)
+klytron_configure_writable_dirs([
+    'storage',                 // Storage directory and subdirectories
+    'logs',                    // Application logs
+    'cache',                   // Application cache
+    'uploads',                 // User uploads (if applicable)
+    'data',                    // Application data
+]);
+
+///////////////////////////////////////////////////////////////////////////////
+// CUSTOM TASKS (OPTIONAL)
+///////////////////////////////////////////////////////////////////////////////
+
+// Add your custom tasks here if needed
+// Example:
+/*
+task('project:custom:task', function () {
+    info("Running custom task...");
+    // Your custom logic here
+})->desc('Custom project task');
+*/
+
+///////////////////////////////////////////////////////////////////////////////
+// CUSTOM DEPLOYMENT FLOW (OPTIONAL)
+///////////////////////////////////////////////////////////////////////////////
+
+// Use the standard deployment flow (recommended)
+// Uncomment and modify the following to create a custom deployment flow:
+
+/*
+task('deploy', [
+    'deploy:start_timer',
+    'deploy:unlock',
+    'deploy:setup',
+    'deploy:lock',
+    'deploy:release',
+    'deploy:update_code',
+    'deploy:shared',
+    'deploy:writable',
+    'deploy:symlink',
+    'deploy:unlock',
+    'deploy:cleanup',
+    'deploy:end_timer',
+])->desc('Deploy your project');
+*/
+
+// Or use the standard deployment flow (recommended)
+task('deploy', klytron_deploy_flow());
+
+///////////////////////////////////////////////////////////////////////////////
+// UTILITY TASKS
+///////////////////////////////////////////////////////////////////////////////
+
+// Test task
+task('test', function () {
+    info("🎉 Klytron Deployer Library is working!");
+    info("Application: " . get('application'));
+    info("Repository: " . get('repository'));
+    info("Deploy Path: " . get('deploy_path_parent'));
+})->desc('Test the Klytron Deployer Library');
+
+// Help task
+task('help', function () {
+    info("📄 ===== GENERAL PROJECT DEPLOYMENT HELP =====");
+    info("");
+    info("📋 Available Commands:");
+    info("  vendor/bin/dep test    - Test the library");
+    info("  vendor/bin/dep deploy  - Deploy your project");
+    info("  vendor/bin/dep help    - Show this help");
+    info("");
+    info("📄 Project Features:");
+    info("  - Using Klytron Deployer Library (framework-agnostic)");
+    info("  - Standard deployment workflow");
+    info("  - Basic file and directory management");
+    info("  - Customizable shared files and directories");
+    info("");
+    info("📞 Support:");
+    info("  - Documentation: https://github.com/klytron/php-deployment-kit");
+    info("================================================");
+})->desc('Show general project deployment help');

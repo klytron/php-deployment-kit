@@ -1,0 +1,18 @@
+# Exclude development-only files from Packagist archives and composer create-project
+# These files are useful in the git repo but should not be included in the composer package download
+
+# Internal dev documentation
+SECURITY_AUDIT_REPORT.md export-ignore
+GITHUB_REPO_DETAILS.md export-ignore
+docs/DOCUMENTATION_IMPROVEMENTS.md export-ignore
+docs/DOCUMENTATION_SUMMARY.md export-ignore
+
+# Development-only tooling
+tests/ export-ignore
+.github/ export-ignore
+.gitattributes export-ignore
+
+# IDE and OS files
+.vscode/ export-ignore
+.idea/ export-ignore
+.editorconfig export-ignore

@@ -1,0 +1,94 @@
+{
+  "name": "klytron/php-deployment-kit",
+  "description": "A comprehensive deployment library for PHP applications built on Deployer. Supports Laravel, Yii2, and simple PHP applications.",
+  "version": "1.0.0",
+  "type": "library",
+  "keywords": [
+    "deployer",
+    "laravel",
+    "yii2",
+    "php",
+    "api",
+    "deployment",
+    "klytron",
+    "automation",
+    "devops"
+  ],
+  "homepage": "https://github.com/klytron/php-deployment-kit",
+  "readme": "README.md",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Michael K. Laweh",
+      "email": "hi@klytron.com",
+      "homepage": "https://www.klytron.com",
+      "role": "Developer"
+    }
+  ],
+  "support": {
+    "issues": "https://github.com/klytron/php-deployment-kit/issues",
+    "source": "https://github.com/klytron/php-deployment-kit"
+  },
+  "funding": [
+    {
+      "type": "custom",
+      "url": "https://www.klytron.com/buy-me-a-coffee"
+    }
+  ],
+  "require": {
+    "php": "^8.1",
+    "deployer/deployer": "^7.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.0",
+    "phpstan/phpstan": "^1.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Klytron\\PhpDeploymentKit\\": "src/"
+    },
+    "files": [
+      "deployment-kit.php",
+      "deployment-kit-core.php"
+    ]
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Klytron\\PhpDeploymentKit\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "analyse": "phpstan analyse",
+    "check": [
+      "@test",
+      "@analyse"
+    ]
+  },
+  "extra": {
+    "deployer": {
+      "recipes": [
+        "deployment-kit.php",
+        "klytron-tasks.php",
+        "recipes/klytron-laravel-recipe.php",
+        "recipes/klytron-server-recipe.php",
+        "recipes/klytron-php-recipe.php",
+        "recipes/klytron-yii2-recipe.php",
+        "recipes/laravel.php"
+      ]
+    },
+    "laravel": {
+      "providers": [
+        "Klytron\\PhpDeploymentKit\\Providers\\PhpDeploymentKitServiceProvider"
+      ]
+    }
+  },
+  "config": {
+    "sort-packages": true,
+    "allow-plugins": {
+      "deployer/deployer": true
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
