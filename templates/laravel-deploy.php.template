@@ -1,280 +1,213 @@
 <?php
 /**
- * Laravel Project Deployment Configuration
- * 
- * This template uses the Klytron Deployer Library
- * Updated for the new framework-agnostic version of the package
- * Customize the values below for your project
- * 
- * @author Michael K. Laweh (klytron) (https://www.klytron.com)
+ * Laravel Project — Deployment Configuration
+ *
+ * This file is the per-project customiser. The klytron/php-deployment-kit
+ * package handles all task logic; you only supply project-specific values here.
+ *
+ * Usage:  vendor/bin/dep deploy
+ * Docs:   https://github.com/klytron/php-deployment-kit
  */
 
 namespace Deployer;
 
-///////////////////////////////////////////////////////////////////////////////
-// INCLUDE KLYTRON DEPLOYER LIBRARY
-///////////////////////////////////////////////////////////////////////////////
+// ── Package ───────────────────────────────────────────────────────────────────
+// Always include the core kit first, then the framework recipe.
 
-// Include the Klytron Deployer Library (includes standard deployer recipes automatically)
-// Option 1: If installed via Composer (recommended)
-require 'vendor/klytron/php-deployment-kit/src/DeploymentKit.php';
+require __DIR__ . '/vendor/klytron/php-deployment-kit/deployment-kit.php';
+require __DIR__ . '/vendor/klytron/php-deployment-kit/recipes/klytron-laravel-recipe.php';
 
-// Include the Laravel Recipe for Laravel-specific tasks
-require 'vendor/klytron/php-deployment-kit/recipes/laravel.php';
+// ── Application ───────────────────────────────────────────────────────────────
+// klytron_configure_app() sets the app name, git repo, and global Deployer options.
+// The deploy_path is auto-built as: {deploy_path_parent}/{application}
 
-// Option 2: If using git submodule
-// require_once __DIR__ . '/deployment-kit/deployment-kit.php';
-// require_once __DIR__ . '/deployment-kit/recipes/klytron-laravel-recipe.php';
+klytron_configure_app('your-project-name', 'git@github.com:your-org/your-project.git', [
+    'keep_releases'    => 3,      // Releases kept on server for rollback
+    'default_timeout'  => 1800,   // SSH command timeout in seconds (30 min)
+    'ssh_multiplexing' => true,   // Reuse SSH connections for speed
+    'git_tty'          => false,  // Disable TTY for non-interactive deploys
+]);
 
-///////////////////////////////////////////////////////////////////////////////
-// PROJECT-SPECIFIC CONFIGURATION
-///////////////////////////////////////////////////////////////////////////////
+// ── Paths ─────────────────────────────────────────────────────────────────────
+// Arg 1: parent directory where the app folder lives
+// Arg 2: the public_html / document root served by your web server
+// You may use the ${APP_URL_DOMAIN} placeholder — it resolves to klytron_set_domain().
 
-// Configure application using Klytron library
-klytron_configure_app(
-    'your-project-name',                    // Application name
-    'git@github.com:user/your-project.git', // Repository URL
-    [
-        'keep_releases' => 3,               // Number of releases to keep
-        'default_timeout' => 1800,          // Deployment timeout (30 minutes)
-    ]
-);
-
-// Configure deployment paths (using dynamic configuration)
 klytron_set_paths(
-    '/var/www',                              // Parent directory
-    '/var/www/${APP_URL_DOMAIN}/html'        // Dynamic path with domain placeholder
+    '/var/www',                              // deploy_path = /var/www/your-project-name
+    '/var/www/${APP_URL_DOMAIN}/public_html' // document root for web server symlink
 );
 
-// Set PHP version (customize as needed)
-klytron_set_php_version('php8.3');
+klytron_set_domain('your-domain.com');   // Resolves ${APP_URL_DOMAIN} in paths above
+klytron_set_php_version('php8.3');       // PHP binary used for artisan / composer
 
-// Set domain configuration (resolves ${APP_URL_DOMAIN} placeholder)
-klytron_set_domain('your-domain.com');
+// ── Project capabilities ──────────────────────────────────────────────────────
+// Set flags that match what your Laravel project actually uses.
+// The package skips tasks automatically when their flag is false/none.
 
-// Configure project capabilities
 klytron_configure_project([
-    'type' => 'laravel',
-    'database' => 'mysql',        // Options: mysql, mariadb, sqlite, postgresql, none
-    'env_file_local' => '.env.production',
-    'env_file_remote' => '.env',
-    'db_import_path' => 'database/live-db-exports',
-    'supports_passport' => false,  // Set to true if using Laravel Passport
-    'supports_nodejs' => false,    // Set to true if project requires Node.js builds
-    'supports_vite' => false,      // Set to true if using Vite for asset compilation
-    'supports_mix' => false,       // Set to true if using Laravel Mix for asset compilation
-    'supports_storage_link' => true,  // Enable storage link for Laravel
-    'supports_sitemap' => false,   // Set to true if using sitemap generation
+    'type'               => 'laravel',
+
+    // Database: mysql | mariadb | postgresql | sqlite | none
+    'database'           => 'mysql',
+
+    // .env handling
+    'env_file_local'     => '.env.production', // File on your local machine to upload
+    'env_file_remote'    => '.env',            // What it becomes on the server
+
+    // Laravel features — enable what your project uses
+    'supports_nodejs'        => false, // true = npm install will run
+    'supports_vite'          => false, // true = npm run build (Vite) will run
+    'supports_mix'           => false, // true = npm run production (Mix) will run
+    'supports_storage_link'  => true,  // true = artisan storage:link runs
+    'supports_passport'      => false, // true = passport:install runs
+
+    // Post-deploy enhancements
+    'supports_sitemap'   => false, // true = sitemap generated and verified
+    'verify_fonts'       => false, // true = web font accessibility checked
+    'cleanup_assets'     => true,  // true = problematic .htaccess files cleaned
+    'optimize_images'    => false, // true = images compressed post-deploy
+    'enable_encryption'  => false, // true = LARAVEL_ENV_ENCRYPTION_KEY decryption used
 ]);
 
-// Configure host (paths are auto-generated dynamically)
+// ── Host ──────────────────────────────────────────────────────────────────────
+// One entry per deployment target. Add more klytron_configure_host() calls for
+// staging, production, etc. Use labels to target specific hosts:
+//   vendor/bin/dep deploy --stage=production
+
 klytron_configure_host('your-server.com', [
-    'remote_user' => 'root',
-    'branch' => 'main',
-    'http_user' => 'www-data',
-    'http_group' => 'www-data',
-    'labels' => ['stage' => 'production'],
-    // Note: deploy_path is automatically generated as {{deploy_path_parent}}/{{application}}
-    // Result: /var/www/your-project-name
-    // Note: public_html is resolved from template: /var/www/${APP_URL_DOMAIN}/html
-    // Result: /var/www/your-domain/html
+    'remote_user' => 'deploy',   // SSH user
+    'branch'      => 'main',     // Git branch to deploy
+    'http_user'   => 'www-data', // Web server user (for permissions)
+    'http_group'  => 'www-data', // Web server group
+    'labels'      => ['stage' => 'production'],
+    'ssh_options' => [
+        'ConnectTimeout'      => 30,
+        'ServerAliveInterval' => 60,
+        'ServerAliveCountMax' => 3,
+    ],
 ]);
 
-///////////////////////////////////////////////////////////////////////////////
-// PROJECT-SPECIFIC SHARED FILES/DIRECTORIES
-///////////////////////////////////////////////////////////////////////////////
+// ── Shared files & directories ────────────────────────────────────────────────
+// Shared items persist across releases (symlinked into each release).
+// Files: individual files uploaded once and reused.
+// Dirs:  directories written to by the running app (storage, cache, uploads).
 
-// Configure shared files (customize for your project)
 klytron_configure_shared_files([
-    '.env',                    // Environment configuration
-    'public/.htaccess',        // Web server configuration (if customized)
-    // Note: Laravel Passport keys are generated automatically by passport:install
-    // and should not be shared between releases to avoid symlink conflicts
-    //'storage/oauth-private.key', // Laravel Passport private key (if using)
-    //'storage/oauth-public.key',  // Laravel Passport public key (if using)
+    '.env',            // Environment configuration — never committed to git
 ]);
 
-// Configure shared directories (customize for your project)
 klytron_configure_shared_dirs([
-    'storage',                 // Application storage (logs, cache, sessions)
-    'public/uploads',          // User uploaded files (if applicable)
-    'public/storage',          // Public storage symlink target
-    'bootstrap/cache',         // Bootstrap cache (for performance)
+    'storage',          // Laravel storage (logs, sessions, cache, app files)
+    'public/storage',   // Public storage symlink target
+    'bootstrap/cache',  // Bootstrap cache (config, routes, services cache)
 ]);
 
-// Configure writable directories (customize for your project)
 klytron_configure_writable_dirs([
-    'bootstrap/cache',         // Bootstrap cache
-    'storage',                 // Storage directory and subdirectories
-    'storage/app',             // Application files
-    'storage/app/public',      // Public storage
-    'storage/framework',       // Framework cache/sessions/views
-    'storage/framework/cache', // Framework cache
-    'storage/framework/sessions', // Sessions
-    'storage/framework/views', // Compiled views
-    'storage/logs',            // Application logs
-    'public/uploads',          // User uploads (if applicable)
-    'public/storage',          // Public storage symlink
+    'bootstrap/cache',
+    'storage',
+    'storage/app',
+    'storage/app/public',
+    'storage/framework',
+    'storage/framework/cache',
+    'storage/framework/sessions',
+    'storage/framework/views',
+    'storage/logs',
+    'public/storage',
 ]);
 
-///////////////////////////////////////////////////////////////////////////////
-// 🤖 AUTOMATED DEPLOYMENT CONFIGURATION (FOR TESTING/DEBUGGING)
-///////////////////////////////////////////////////////////////////////////////
+// ── Server config files ───────────────────────────────────────────────────────
+// Files copied from your repo into the release on every deploy.
+// Useful for web server configs (.htaccess, nginx.conf) that differ per
+// environment and should not be in shared (they may change with code).
 
-// Set these to enable unattended deployments for quick testing and debugging
-// Comment out or set to null to re-enable interactive prompts
+set('server_config_files', [
+    [
+        'source'    => 'server/.htaccess.production', // Relative to project root
+        'target'    => 'public/.htaccess',            // Relative to release_path
+        'mode'      => 0644,
+        'overwrite' => true,
+    ],
+    // Add more entries as needed:
+    // ['source' => 'server/robots.txt', 'target' => 'public/robots.txt', 'mode' => 0644, 'overwrite' => true],
+]);
 
-// Auto-confirm production deployment (true = yes, false = no, null = ask)
-set('auto_confirm_production', null);
+// ── Unattended deployment (optional) ─────────────────────────────────────────
+// Set these to skip interactive prompts — useful for CI/CD pipelines.
+// Leave as null to keep the interactive prompts (recommended for production).
 
-// Auto-select deployment type ('update', 'fresh', null = ask)
-set('auto_deployment_type', null);
+// set('auto_confirm_production', true);   // Skip "deploy to production?" prompt
+// set('auto_deployment_type', 'update');  // 'update' | 'fresh' — skip type prompt
+// set('auto_upload_env', true);           // Skip env file upload prompt
+// set('auto_database_operation', 'migrations'); // 'migrations'|'import'|'both'|'none'
+// set('auto_clear_caches', true);         // Skip cache-clear prompt
+// set('auto_confirm_settings', true);     // Skip final settings confirmation
 
-// Auto-upload .env.production file (true = yes, false = no, null = ask)
-set('auto_upload_env', null);
+// ── Deployment flow ───────────────────────────────────────────────────────────
+// The full Laravel deployment pipeline. Remove or reorder tasks to customise.
+// All task logic lives in the package — this list is just the execution order.
 
-// Auto-select database operation ('migrations', 'import', 'both', 'none', null = ask)
-set('auto_database_operation', null);
-
-// Auto-clear caches after deployment (true = yes, false = no, null = ask)
-set('auto_clear_caches', null);
-
-// Auto-confirm final deployment settings (true = yes, false = no, null = ask)
-set('auto_confirm_settings', null);
-
-// 💡 USAGE INSTRUCTIONS:
-//
-// For UNATTENDED deployments (testing/debugging):
-// - Set all auto_* values to true/false as needed
-// - Run: vendor/bin/dep deploy
-// - No prompts will appear, deployment runs automatically
-//
-// For INTERACTIVE deployments (production):
-// - Set all auto_* values to null (as shown above)
-// - Run: vendor/bin/dep deploy
-// - You'll be prompted for each decision
-
-///////////////////////////////////////////////////////////////////////////////
-// CUSTOM DEPLOYMENT FLOW (OPTIONAL)
-///////////////////////////////////////////////////////////////////////////////
-
-// Use the new group tasks from the Laravel recipe for cleaner deployment flow
-// Uncomment and modify the following to create a custom deployment flow:
-
-/*
 task('deploy', [
-    'deploy:start_timer',
-    'klytron:laravel:deploy:display:info',           // Group task: validation + info display
-    'klytron:laravel:deploy:configure:interactive',  // Group task: validation + interactive config
-    'deploy:unlock',
-    'klytron:laravel:deploy:prepare:complete',       // Group task: confirmation + backup
-    'deploy:setup',
-    'deploy:lock',
-    'deploy:release',
-    'deploy:fix_repo',                              // Fix repo issues BEFORE code update
-    'deploy:update_code',
-    'deploy:shared',
-    'klytron:laravel:deploy:environment:complete',   // Group task: env upload + deployment
-    'deploy:env',
-    'deploy:vendors',
-    'klytron:laravel:node:vite:build',
-    'klytron:laravel:deploy:database:complete',      // Group task: migration + import (conditional)
-    'klytron:laravel:deploy:passport:install',
-    'deploy:writable',
-    'klytron:laravel:deploy:cache:complete',         // Group task: cache clearing + optimization
-    'deploy:symlink',
-    'klytron:laravel:deploy:finalize:complete',      // Group task: symlink + permissions + storage
-    'klytron:assets:map',                              // Map asset files for database compatibility
-    'klytron:assets:cleanup',                           // Clean up problematic .htaccess files
-    'klytron:sitemap:generate',                           // Generate sitemap
-    'klytron:fonts:verify',                              // Verify font files
-    'klytron:images:optimize',                            // Optimize images (if supported)
-    'deploy:unlock',
-    'deploy:cleanup',
-    'klytron:deploy:access_permissions',             // Final permissions fix
-    'klytron:laravel:deploy:notify:complete',        // Group task: success message + notification
-    'deploy:end_timer',
-])->desc('Deploy Laravel project');
-*/
+    // Preparation
+    'klytron:deploy:start_timer',           // Start deployment timer
+    'deploy:unlock',                        // Clear any stale deploy lock
+    'klytron:deploy:fix_repo',              // Fix git safe-directory and permission issues
 
-// Use the standard deployment flow (recommended for most projects)
-task('deploy', [
-    'klytron:deploy:start_timer',
-    'klytron:laravel:deploy:display:info',           // Group task: validation + info display
-    'klytron:laravel:deploy:configure:interactive',  // Group task: validation + interactive config
-    'deploy:unlock',
-    'klytron:deploy:fix_repo',                       // Fix repo issues BEFORE code update
-    'klytron:laravel:deploy:prepare:complete',       // Group task: confirmation + backup
-    'deploy:setup',
-    'deploy:lock',
-    'deploy:release',
-    'deploy:update_code',
-    'deploy:shared',
-    'klytron:laravel:deploy:environment:complete',   // Group task: env upload + deployment
-    'deploy:env',
-    'deploy:vendors',
-    'klytron:laravel:node:vite:build',
-    'klytron:laravel:deploy:database:complete',      // Group task: migration + import (conditional)
-    'deploy:writable',
-    'klytron:laravel:deploy:cache:complete',         // Group task: cache clearing + optimization
-    'deploy:symlink',
-    'klytron:laravel:deploy:finalize:complete',      // Group task: symlink + permissions + storage
-    'klytron:assets:map',                              // Map asset files for database compatibility
-    'klytron:assets:cleanup',                           // Clean up problematic .htaccess files
-    'klytron:sitemap:generate',                           // Generate sitemap
-    'klytron:fonts:verify',                              // Verify font files
-    'klytron:images:optimize',                            // Optimize images (if supported)
-    'deploy:unlock',
-    'deploy:cleanup',
-    'klytron:deploy:access_permissions',             // Final permissions fix
-    'klytron:laravel:deploy:notify:complete',        // Group task: success message + notification
-    'klytron:deploy:end_timer',
-])->desc('Deploy Laravel project');
+    // Code update
+    'klytron:laravel:deploy:prepare:complete', // Confirm deployment + optional backup
+    'deploy:setup',                         // Create directory structure on server
+    'deploy:lock',                          // Write deploy.lock
+    'deploy:release',                       // Create new release directory
+    'deploy:update_code',                   // Git fetch/checkout on server
+    'deploy:shared',                        // Symlink shared files and dirs
+    'klytron:deploy:fix_git_ownership',     // Fix git ownership after code update
 
-after('klytron:laravel:deploy:success', 'klytron:system:restart');
+    // Environment
+    'klytron:laravel:deploy:environment:complete', // Upload .env + optional decryption
 
-///////////////////////////////////////////////////////////////////////////////
-// CUSTOM TASKS (OPTIONAL)
-///////////////////////////////////////////////////////////////////////////////
+    // Dependencies
+    'deploy:vendors',                       // composer install --no-dev --optimize-autoloader
 
-// Add your custom tasks here if needed
-// Example:
-/*
-task('project:custom:task', function () {
-    info("Running custom task...");
-    // Your custom logic here
-})->desc('Custom project task');
-*/
+    // Build (skipped automatically when supports_vite/nodejs = false)
+    'klytron:laravel:node:vite:build',      // npm install + npm run build (Vite)
 
-///////////////////////////////////////////////////////////////////////////////
-// UTILITY TASKS
-///////////////////////////////////////////////////////////////////////////////
+    // Database (skipped when database = 'none')
+    'klytron:laravel:deploy:database:complete', // Migrations and/or DB import
 
-// Test task
-task('test', function () {
-    info("🎉 Klytron Deployer Library is working!");
-    info("Application: " . get('application'));
-    info("Repository: " . get('repository'));
-    info("Deploy Path: " . get('deploy_path_parent'));
-})->desc('Test the Klytron Deployer Library');
+    // Optimise
+    'deploy:writable',                      // Set directory permissions
+    'klytron:laravel:deploy:cache:complete', // artisan cache:clear, config:cache, optimize
 
-// Help task
-task('help', function () {
-    info("📄 ===== LARAVEL PROJECT DEPLOYMENT HELP =====");
-    info("");
-    info("📋 Available Commands:");
-    info("  vendor/bin/dep test    - Test the library");
-    info("  vendor/bin/dep deploy  - Deploy Laravel project");
-    info("  vendor/bin/dep help    - Show this help");
-    info("");
-    info("📄 Laravel Features:");
-    info("  - Using Klytron Deployer Library (framework-agnostic)");
-    info("  - Laravel recipe for framework-specific tasks");
-    info("  - MySQL/MariaDB database support");
-    info("  - Full deployment workflow with backup");
-    info("  - Group tasks for cleaner deployment flow");
-    info("");
-    info("📞 Support:");
-    info("  - Documentation: https://github.com/klytron/php-deployment-kit");
-    info("================================================");
-})->desc('Show Laravel deployment help');
+    // Go live
+    'deploy:symlink',                       // Atomically switch current → new release
+    'klytron:laravel:deploy:finalize:complete', // storage:link, permissions, server symlinks
+
+    // Post-deploy enhancements
+    'klytron:assets:map',                   // Map Vite hashed assets for DB compatibility
+    'klytron:assets:cleanup',               // Remove problematic .htaccess in build dir
+    'klytron:sitemap:generate',             // Generate sitemap (if supports_sitemap = true)
+    'klytron:sitemap:verify',               // Verify sitemap was generated
+    'klytron:sitemap:check',                // HTTP-check sitemap accessibility
+    'klytron:fonts:verify',                 // HTTP-check web font accessibility
+    'klytron:images:optimize',              // Compress images (if optimize_images = true)
+
+    // Cleanup & done
+    'deploy:unlock',                        // Remove deploy.lock
+    'deploy:cleanup',                       // Delete old releases (keep_releases)
+    'klytron:deploy:access_permissions',    // Final ownership/permission sweep
+    'klytron:laravel:deploy:notify:complete', // Print success summary + optionally notify
+    'klytron:deploy:end_timer',             // Print total elapsed time
+])->desc('Deploy Laravel project to production');
+
+// ── Hooks ─────────────────────────────────────────────────────────────────────
+// Hooks run additional tasks at specific points without modifying the flow above.
+
+after('klytron:laravel:deploy:success', 'klytron:system:restart'); // Reload PHP-FPM/nginx
+after('deploy:shared', 'klytron:server:deploy:configs');           // Copy server config files
+
+// ── Guard ─────────────────────────────────────────────────────────────────────
+// Prevent accidental deploys without the required environment file.
+
+if (!file_exists('.env.production')) {
+    throw new \RuntimeException('.env.production is required. Create it before deploying.');
+}

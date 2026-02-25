@@ -1,162 +1,146 @@
 <?php
 /**
- * General Project Deployment Configuration
- * 
- * This template uses the Klytron Deployer Library
- * Updated for the new framework-agnostic version of the package
- * Customize the values below for your project
- * 
- * @author Michael K. Laweh (klytron) (https://www.klytron.com)
+ * General PHP Project — Deployment Configuration
+ *
+ * This file is the per-project customiser. The klytron/php-deployment-kit
+ * package handles all task logic; you only supply project-specific values here.
+ *
+ * Usage:  vendor/bin/dep deploy
+ * Docs:   https://github.com/klytron/php-deployment-kit
+ *
+ * For framework-specific templates see:
+ *   templates/laravel-deploy.php.template   (Laravel / API)
+ *   templates/simple-php.php.template       (Simple PHP)
  */
 
 namespace Deployer;
 
-///////////////////////////////////////////////////////////////////////////////
-// INCLUDE KLYTRON DEPLOYER LIBRARY
-///////////////////////////////////////////////////////////////////////////////
+// ── Package ───────────────────────────────────────────────────────────────────
+// Include core kit + the recipe that matches your project type.
+//
+// Laravel:     recipes/klytron-laravel-recipe.php
+// Yii2:        recipes/klytron-yii2-recipe.php
+// Simple PHP:  recipes/klytron-php-recipe.php
+// Server only: recipes/klytron-server-recipe.php
 
-// Include the Klytron Deployer Library (framework-agnostic core)
-// Option 1: If installed via Composer (recommended)
-require 'vendor/klytron/php-deployment-kit/src/DeploymentKit.php';
+require __DIR__ . '/vendor/klytron/php-deployment-kit/deployment-kit.php';
+require __DIR__ . '/vendor/klytron/php-deployment-kit/recipes/klytron-php-recipe.php';
 
-// Option 2: If using git submodule
-// require_once __DIR__ . '/deployment-kit/deployment-kit.php';
+// ── Application ───────────────────────────────────────────────────────────────
+// deploy_path is auto-built as: {deploy_path_parent}/{application}
 
-// Option 3: Include framework-specific recipe if needed
-// For Laravel projects:
-// require 'vendor/klytron/php-deployment-kit/recipes/laravel.php';
-// For Yii2 projects:
-// require 'vendor/klytron/php-deployment-kit/recipes/yii2.php';
+klytron_configure_app('your-project-name', 'git@github.com:your-org/your-project.git', [
+    'keep_releases'    => 3,     // Releases kept on server for rollback
+    'default_timeout'  => 1800,  // SSH timeout in seconds (30 min)
+    'ssh_multiplexing' => true,  // Reuse SSH connections for speed
+    'git_tty'          => false, // Disable TTY for non-interactive deploys
+]);
 
-///////////////////////////////////////////////////////////////////////////////
-// PROJECT-SPECIFIC CONFIGURATION
-///////////////////////////////////////////////////////////////////////////////
+// ── Paths ─────────────────────────────────────────────────────────────────────
+// Arg 1: parent directory that contains your app folder
+// Arg 2: document root served by your web server
+// ${APP_URL_DOMAIN} is replaced by the value passed to klytron_set_domain().
 
-// Configure application using Klytron library
-klytron_configure_app(
-    'your-project-name',                    // Application name
-    'git@github.com:user/your-project.git', // Repository URL
-    [
-        'keep_releases' => 3,               // Number of releases to keep
-        'default_timeout' => 1800,          // Deployment timeout (30 minutes)
-    ]
-);
-
-// Configure deployment paths
 klytron_set_paths(
-    '/var/www',     // Parent directory
-    '/var/www/html'       // Public HTML path
+    '/var/www',                              // deploy_path = /var/www/your-project-name
+    '/var/www/${APP_URL_DOMAIN}/public_html' // document root for web server symlink
 );
 
-// Set PHP version (customize as needed)
-klytron_set_php_version('php8.3');
+klytron_set_domain('your-domain.com');  // Resolves ${APP_URL_DOMAIN} in paths above
+klytron_set_php_version('php8.3');      // PHP binary used for php commands
 
-// Configure host
+// ── Host ──────────────────────────────────────────────────────────────────────
+
 klytron_configure_host('your-server.com', [
-    'remote_user' => 'root',
-    'branch' => 'main',
-    'http_user' => 'www-data',
-    'http_group' => 'www-data',
-    'labels' => ['stage' => 'production'],
+    'remote_user' => 'deploy',   // SSH user
+    'branch'      => 'main',     // Git branch to deploy
+    'http_user'   => 'www-data', // Web server user (for permissions)
+    'http_group'  => 'www-data', // Web server group
+    'labels'      => ['stage' => 'production'],
+    'ssh_options' => [
+        'ConnectTimeout'      => 30,
+        'ServerAliveInterval' => 60,
+        'ServerAliveCountMax' => 3,
+    ],
 ]);
 
-///////////////////////////////////////////////////////////////////////////////
-// PROJECT-SPECIFIC SHARED FILES/DIRECTORIES
-///////////////////////////////////////////////////////////////////////////////
+// ── Project capabilities ──────────────────────────────────────────────────────
+// The package skips tasks whose flags are false/none automatically.
 
-// Configure shared files (customize for your project)
+klytron_configure_project([
+    'type'               => 'php',  // php | laravel | yii2
+    'database'           => 'none', // mysql | mariadb | postgresql | sqlite | none
+    'env_file_local'     => '.env',
+    'env_file_remote'    => '.env',
+    'supports_nodejs'    => false,
+    'supports_vite'      => false,
+    'supports_sitemap'   => false,
+    'verify_fonts'       => false,
+    'cleanup_assets'     => false,
+    'optimize_images'    => false,
+    'enable_encryption'  => false,
+]);
+
+// ── Shared files & dirs ───────────────────────────────────────────────────────
+// Shared items persist across releases — symlinked into each new release.
+
 klytron_configure_shared_files([
-    '.env',                    // Environment configuration (if using)
-    'config.php',              // Configuration file (if using)
-    'public/.htaccess',        // Web server configuration (if customized)
+    '.env',           // Environment configuration — never committed to git
 ]);
 
-// Configure shared directories (customize for your project)
 klytron_configure_shared_dirs([
-    'storage',                 // Application storage (logs, cache, sessions)
-    'logs',                    // Application logs
-    'cache',                   // Application cache
-    'uploads',                 // User uploaded files (if applicable)
-    'data',                    // Application data
+    'storage',        // Application storage
+    'uploads',        // User-uploaded files
+    'cache',          // Application cache
+    'logs',           // Application logs
 ]);
 
-// Configure writable directories (customize for your project)
 klytron_configure_writable_dirs([
-    'storage',                 // Storage directory and subdirectories
-    'logs',                    // Application logs
-    'cache',                   // Application cache
-    'uploads',                 // User uploads (if applicable)
-    'data',                    // Application data
+    'storage',
+    'uploads',
+    'cache',
+    'logs',
 ]);
 
-///////////////////////////////////////////////////////////////////////////////
-// CUSTOM TASKS (OPTIONAL)
-///////////////////////////////////////////////////////////////////////////////
+// ── Server config files ───────────────────────────────────────────────────────
+// Files copied from your repo into the release on every deploy.
 
-// Add your custom tasks here if needed
-// Example:
-/*
-task('project:custom:task', function () {
-    info("Running custom task...");
-    // Your custom logic here
-})->desc('Custom project task');
-*/
+// set('server_config_files', [
+//     ['source' => 'server/.htaccess.production', 'target' => 'public/.htaccess', 'mode' => 0644, 'overwrite' => true],
+// ]);
 
-///////////////////////////////////////////////////////////////////////////////
-// CUSTOM DEPLOYMENT FLOW (OPTIONAL)
-///////////////////////////////////////////////////////////////////////////////
+// ── Unattended deployment (optional) ─────────────────────────────────────────
+// Uncomment to skip interactive prompts — useful for CI/CD pipelines.
 
-// Use the standard deployment flow (recommended)
-// Uncomment and modify the following to create a custom deployment flow:
+// set('auto_confirm_production', true);
+// set('auto_deployment_type', 'update');  // 'update' | 'fresh'
+// set('auto_upload_env', true);
+// set('auto_database_operation', 'none');
+// set('auto_clear_caches', true);
+// set('auto_confirm_settings', true);
 
-/*
+// ── Deployment flow ───────────────────────────────────────────────────────────
+// Customise task order here. All task logic lives in the package.
+
 task('deploy', [
-    'deploy:start_timer',
+    'klytron:deploy:start_timer',
     'deploy:unlock',
+    'klytron:deploy:fix_repo',
     'deploy:setup',
     'deploy:lock',
     'deploy:release',
     'deploy:update_code',
     'deploy:shared',
+    'klytron:upload:env:production',   // Upload .env
+    'deploy:vendors',                  // composer install
     'deploy:writable',
     'deploy:symlink',
+    'klytron:deploy:access_permissions',
     'deploy:unlock',
     'deploy:cleanup',
-    'deploy:end_timer',
-])->desc('Deploy your project');
-*/
+    'klytron:deploy:end_timer',
+])->desc('Deploy project to production');
 
-// Or use the standard deployment flow (recommended)
-task('deploy', klytron_deploy_flow());
+// ── Hooks ─────────────────────────────────────────────────────────────────────
 
-///////////////////////////////////////////////////////////////////////////////
-// UTILITY TASKS
-///////////////////////////////////////////////////////////////////////////////
-
-// Test task
-task('test', function () {
-    info("🎉 Klytron Deployer Library is working!");
-    info("Application: " . get('application'));
-    info("Repository: " . get('repository'));
-    info("Deploy Path: " . get('deploy_path_parent'));
-})->desc('Test the Klytron Deployer Library');
-
-// Help task
-task('help', function () {
-    info("📄 ===== GENERAL PROJECT DEPLOYMENT HELP =====");
-    info("");
-    info("📋 Available Commands:");
-    info("  vendor/bin/dep test    - Test the library");
-    info("  vendor/bin/dep deploy  - Deploy your project");
-    info("  vendor/bin/dep help    - Show this help");
-    info("");
-    info("📄 Project Features:");
-    info("  - Using Klytron Deployer Library (framework-agnostic)");
-    info("  - Standard deployment workflow");
-    info("  - Basic file and directory management");
-    info("  - Customizable shared files and directories");
-    info("");
-    info("📞 Support:");
-    info("  - Documentation: https://github.com/klytron/php-deployment-kit");
-    info("================================================");
-})->desc('Show general project deployment help');
+after('deploy:shared', 'klytron:server:deploy:configs');

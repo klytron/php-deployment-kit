@@ -151,7 +151,7 @@ klytron_configure_project(array $config);
 
 #### Project Type
 ```php
-'type' => 'laravel' | 'laravel-api' | 'yii2' | 'simple-php' | 'custom'
+'type' => 'laravel' | 'yii2' | 'php'
 ```
 
 #### Database Configuration
@@ -395,66 +395,36 @@ klytron_configure_writable_dirs([
 
 ## 🎯 Custom Tasks and Hooks
 
-### `klytron_add_task()`
+Use standard Deployer functions to add tasks and hooks. There is no separate wrapper — this is intentional so your `deploy.php` calls are portable and Deployer-idiomatic.
 
-Add a custom deployment task.
+### Adding a custom task
 
 ```php
-klytron_add_task(
-    string $name,              // Task name
-    callable $callback,        // Task callback
-    array $options = []        // Task options
-);
+task('myproject:warm_cache', function () {
+    run('php artisan cache:warm');
+})->desc('Warm application cache');
 ```
 
-**Example:**
+### Running a task at a specific point (hooks)
+
 ```php
-klytron_add_task('deploy:custom', function () {
-    run('echo "Custom deployment task"');
-    run('php artisan custom:command');
-}, [
-    'description' => 'Run custom deployment task',
-    'dependencies' => ['deploy:update_code'],
-]);
+// Syntax: before|after('{existing-task}', '{task-to-run}')
+after('deploy:symlink', 'myproject:warm_cache');
+before('deploy:vendors', 'myproject:check_secrets');
+
+// Common klytron hook points
+after('klytron:laravel:deploy:success', 'klytron:system:restart');  // Reload PHP-FPM
+after('deploy:shared', 'klytron:server:deploy:configs');             // Copy server config files
 ```
 
-### `klytron_add_hook()`
-
-Add a deployment hook.
+### Custom task example
 
 ```php
-klytron_add_hook(
-    string $hook,              // Hook name
-    string $task,              // Task to execute
-    array $options = []        // Hook options
-);
-```
+task('myproject:seed', function () {
+    run('{{bin/php}} {{release_or_current_path}}/artisan db:seed --force');
+})->desc('Run database seeders');
 
-**Available Hooks:**
-- `before:deploy`
-- `after:deploy`
-- `before:deploy:update_code`
-- `after:deploy:update_code`
-- `before:deploy:vendors`
-- `after:deploy:vendors`
-- `before:deploy:publish`
-- `after:deploy:publish`
-- `before:deploy:shared`
-- `after:deploy:shared`
-- `before:deploy:writable`
-- `after:deploy:writable`
-- `before:deploy:symlink`
-- `after:deploy:symlink`
-- `before:deploy:unlock`
-- `after:deploy:unlock`
-- `before:deploy:cleanup`
-- `after:deploy:cleanup`
-
-**Example:**
-```php
-klytron_add_hook('after:deploy', 'deploy:custom', [
-    'description' => 'Run custom task after deployment',
-]);
+after('klytron:laravel:deploy:database:complete', 'myproject:seed');
 ```
 
 ## 🎯 Environment Variables
@@ -634,80 +604,89 @@ klytron_configure_security([
 
 ## 🎯 Complete Configuration Example
 
-Here's a complete configuration example for a Laravel application:
+Full Laravel project deploy.php:
 
 ```php
 <?php
-require 'vendor/klytron/php-deployment-kit/deployment-kit.php';
-require 'vendor/klytron/php-deployment-kit/recipes/klytron-laravel-recipe.php';
+namespace Deployer;
 
-// Basic application configuration
-klytron_configure_app('my-laravel-app', 'git@github.com:user/my-app.git', [
-    'keep_releases' => 5,
-    'default_timeout' => 3600,
+require __DIR__ . '/vendor/klytron/php-deployment-kit/deployment-kit.php';
+require __DIR__ . '/vendor/klytron/php-deployment-kit/recipes/klytron-laravel-recipe.php';
+
+klytron_configure_app('my-laravel-app', 'git@github.com:my-org/my-app.git', [
+    'keep_releases'   => 3,
+    'default_timeout' => 1800,
 ]);
 
-// Set paths and domain
-klytron_set_paths('/var/www', '/var/www/html');
+klytron_set_paths('/var/www', '/var/www/${APP_URL_DOMAIN}/public_html');
 klytron_set_domain('myapp.com');
 klytron_set_php_version('php8.3');
 
-// Configure project capabilities
 klytron_configure_project([
-    'type' => 'laravel',
-    'database' => 'mysql',
-    'db_host' => 'localhost',
-    'db_name' => 'myapp',
-    'db_user' => 'root',
-    'db_password' => 'secret',
-    'env_file_local' => '.env.production',
-    'env_file_remote' => '.env',
-    'supports_vite' => true,
+    'type'                  => 'laravel',
+    'database'              => 'mysql',
+    'env_file_local'        => '.env.production',
+    'env_file_remote'       => '.env',
+    'supports_nodejs'       => true,
+    'supports_vite'         => true,
     'supports_storage_link' => true,
-    'supports_passport' => false,
-    'backup_enabled' => true,
-    'backup_database' => true,
-    'security_checks' => true,
+    'supports_passport'     => false,
+    'supports_sitemap'      => true,
+    'verify_fonts'          => true,
+    'cleanup_assets'        => true,
 ]);
 
-// Configure host
 klytron_configure_host('myapp.com', [
-    'remote_user' => 'root',
-    'branch' => 'main',
-    'http_user' => 'www-data',
-    'http_group' => 'www-data',
-    'labels' => ['stage' => 'production'],
+    'remote_user' => 'deploy',
+    'branch'      => 'main',
+    'http_user'   => 'www-data',
+    'http_group'  => 'www-data',
+    'labels'      => ['stage' => 'production'],
+    'ssh_options' => ['ConnectTimeout' => 30, 'ServerAliveInterval' => 60, 'ServerAliveCountMax' => 3],
 ]);
 
-// Configure shared files and directories
-klytron_configure_shared_files([
-    '.env',
-    'public/.htaccess',
-]);
-
-klytron_configure_shared_dirs([
-    'storage',
-    'public/uploads',
-    'public/storage',
-    'bootstrap/cache',
-]);
-
-// Configure writable directories
+klytron_configure_shared_files(['.env']);
+klytron_configure_shared_dirs(['storage', 'public/storage', 'bootstrap/cache']);
 klytron_configure_writable_dirs([
-    'storage',
-    'bootstrap/cache',
-    'public/uploads',
+    'bootstrap/cache', 'storage', 'storage/app', 'storage/app/public',
+    'storage/framework', 'storage/framework/cache', 'storage/framework/sessions',
+    'storage/framework/views', 'storage/logs', 'public/storage',
 ]);
 
-// Add custom tasks
-klytron_add_task('deploy:custom', function () {
-    run('php artisan custom:command');
-}, [
-    'description' => 'Run custom deployment task',
+set('server_config_files', [
+    ['source' => 'server/.htaccess.production', 'target' => 'public/.htaccess', 'mode' => 0644, 'overwrite' => true],
 ]);
 
-// Add hooks
-klytron_add_hook('after:deploy', 'deploy:custom');
+task('deploy', [
+    'klytron:deploy:start_timer',
+    'deploy:unlock',
+    'klytron:deploy:fix_repo',
+    'klytron:laravel:deploy:prepare:complete',
+    'deploy:setup', 'deploy:lock', 'deploy:release', 'deploy:update_code',
+    'deploy:shared', 'klytron:deploy:fix_git_ownership',
+    'klytron:laravel:deploy:environment:complete',
+    'deploy:vendors',
+    'klytron:laravel:node:vite:build',
+    'klytron:laravel:deploy:database:complete',
+    'deploy:writable',
+    'klytron:laravel:deploy:cache:complete',
+    'deploy:symlink',
+    'klytron:laravel:deploy:finalize:complete',
+    'klytron:assets:map', 'klytron:assets:cleanup',
+    'klytron:sitemap:generate', 'klytron:sitemap:verify', 'klytron:sitemap:check',
+    'klytron:fonts:verify', 'klytron:images:optimize',
+    'deploy:unlock', 'deploy:cleanup',
+    'klytron:deploy:access_permissions',
+    'klytron:laravel:deploy:notify:complete',
+    'klytron:deploy:end_timer',
+])->desc('Deploy to production');
+
+after('klytron:laravel:deploy:success', 'klytron:system:restart');
+after('deploy:shared', 'klytron:server:deploy:configs');
+
+if (!file_exists('.env.production')) {
+    throw new \RuntimeException('.env.production is required.');
+}
 ```
 
 ## 🎯 Configuration Best Practices

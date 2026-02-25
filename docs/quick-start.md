@@ -1,343 +1,271 @@
 # Quick Start Guide
 
-Get up and running with PHP Deployment Kit in under 5 minutes!
+Get up and running with PHP Deployment Kit in under 5 minutes.
 
 ## Prerequisites
 
-Before you begin, ensure you have:
-
-- **PHP 8.1+** installed on your local machine
-- **Composer** installed and configured
-- **Git** repository for your project
+- **PHP 8.1+** on your local machine
+- **Composer** installed
+- A **Git** repository for your project
 - **SSH access** to your deployment server
-- **Server with PHP 8.1+** and required extensions
 
 ## Step 1: Install
 
 ```bash
-cd /path/to/your/project
 composer require klytron/php-deployment-kit --dev
 ```
 
-Verify installation:
+Verify:
 
 ```bash
 vendor/bin/dep --version
-# Output: Deployer 7.x.x
+# Deployer 7.x.x
 ```
 
 ## Step 2: Create deploy.php
 
-Create a `deploy.php` file in your project root:
+Create a `deploy.php` in your project root. The file is a **per-project customiser** — all deployment logic lives in the package.
 
-### For Laravel Projects
+### Laravel project
 
 ```php
 <?php
 namespace Deployer;
 
-// Include the PHP Deployment Kit (framework-agnostic core)
+// Core kit + Laravel-specific tasks
 require __DIR__ . '/vendor/klytron/php-deployment-kit/deployment-kit.php';
-
-// Include the Laravel Recipe for Laravel-specific tasks
 require __DIR__ . '/vendor/klytron/php-deployment-kit/recipes/klytron-laravel-recipe.php';
 
-// Configure your application
-klytron_configure_app(
-    'my-awesome-app',
-    'git@github.com:username/my-app.git',
-    [
-        'keep_releases' => 3,
-        'default_timeout' => 1800,
-    ]
-);
+// Application — deploy_path = {parent}/{app-name}
+klytron_configure_app('my-app', 'git@github.com:my-org/my-app.git', [
+    'keep_releases'   => 3,
+    'default_timeout' => 1800,
+]);
 
-// Set deployment paths
-klytron_set_paths(
-    '/var/www',
-    '/var/www/html'
-);
-
-// Set domain
-klytron_set_domain('your-domain.com');
-
-// Set PHP version
+// Where does the app live on the server?
+klytron_set_paths('/var/www', '/var/www/${APP_URL_DOMAIN}/public_html');
+klytron_set_domain('my-app.com');    // Resolves ${APP_URL_DOMAIN}
 klytron_set_php_version('php8.3');
 
-// Configure project capabilities
+// What does this project use?
 klytron_configure_project([
-    'type' => 'laravel',
-    'database' => 'mysql',
-    'env_file_local' => '.env.production',
-    'env_file_remote' => '.env',
-    'supports_vite' => true,
-    'supports_storage_link' => true,
+    'type'                  => 'laravel',
+    'database'              => 'mysql',         // mysql|mariadb|postgresql|sqlite|none
+    'env_file_local'        => '.env.production',
+    'env_file_remote'       => '.env',
+    'supports_vite'         => true,            // npm run build (Vite)
+    'supports_storage_link' => true,            // artisan storage:link
 ]);
 
-// Configure your server
-klytron_configure_host('your-domain.com', [
-    'remote_user' => 'root',
-    'branch' => 'main',
-    'http_user' => 'www-data',
-    'http_group' => 'www-data',
+// Your server
+klytron_configure_host('your-server.com', [
+    'remote_user' => 'deploy',
+    'branch'      => 'main',
+    'http_user'   => 'www-data',
+    'http_group'  => 'www-data',
+    'labels'      => ['stage' => 'production'],
 ]);
 
-// Configure shared files/directories
-klytron_configure_shared_files([
-    '.env',
-]);
-
-klytron_configure_shared_dirs([
-    'storage',
-    'public/storage',
-    'bootstrap/cache',
-]);
-
+// Shared across releases
+klytron_configure_shared_files(['.env']);
+klytron_configure_shared_dirs(['storage', 'public/storage', 'bootstrap/cache']);
 klytron_configure_writable_dirs([
-    'bootstrap/cache',
-    'storage',
-    'storage/app/public',
-    'storage/framework/cache',
-    'storage/framework/sessions',
-    'storage/framework/views',
-    'storage/logs',
-    'public/storage',
+    'bootstrap/cache', 'storage', 'storage/app', 'storage/app/public',
+    'storage/framework', 'storage/framework/cache', 'storage/framework/sessions',
+    'storage/framework/views', 'storage/logs', 'public/storage',
 ]);
 
-// Define deployment flow
+// Full Laravel pipeline
 task('deploy', [
     'klytron:deploy:start_timer',
-    'klytron:laravel:deploy:display:info',
-    'klytron:laravel:deploy:configure:interactive',
     'deploy:unlock',
+    'klytron:deploy:fix_repo',
+    'klytron:laravel:deploy:prepare:complete',
     'deploy:setup',
     'deploy:lock',
     'deploy:release',
     'deploy:update_code',
     'deploy:shared',
-    'deploy:env',
+    'klytron:deploy:fix_git_ownership',
+    'klytron:laravel:deploy:environment:complete',
     'deploy:vendors',
+    'klytron:laravel:node:vite:build',
+    'klytron:laravel:deploy:database:complete',
     'deploy:writable',
+    'klytron:laravel:deploy:cache:complete',
     'deploy:symlink',
+    'klytron:laravel:deploy:finalize:complete',
+    'klytron:assets:map',
+    'klytron:assets:cleanup',
+    'klytron:fonts:verify',
+    'deploy:unlock',
     'deploy:cleanup',
+    'klytron:deploy:access_permissions',
+    'klytron:laravel:deploy:notify:complete',
     'klytron:deploy:end_timer',
-])->desc('Deploy my application');
+])->desc('Deploy to production');
+
+after('klytron:laravel:deploy:success', 'klytron:system:restart');
+after('deploy:shared', 'klytron:server:deploy:configs');
+
+if (!file_exists('.env.production')) {
+    throw new \RuntimeException('.env.production is required.');
+}
 ```
 
-### For Simple PHP Projects
+### Simple PHP project
 
 ```php
 <?php
 namespace Deployer;
 
-// Include only the framework-agnostic core
+// Core kit + plain PHP recipe
 require __DIR__ . '/vendor/klytron/php-deployment-kit/deployment-kit.php';
+require __DIR__ . '/vendor/klytron/php-deployment-kit/recipes/klytron-php-recipe.php';
 
-klytron_configure_app('my-php-app', 'git@github.com:user/my-app.git');
+klytron_configure_app('my-site', 'git@github.com:my-org/my-site.git');
 klytron_set_paths('/var/www', '/var/www/html');
-klytron_set_domain('myapp.com');
+klytron_set_php_version('php8.3');
 
-klytron_configure_project([
-    'type' => 'simple-php',
-    'database' => 'none',
+klytron_configure_project(['type' => 'php', 'database' => 'none']);
+
+klytron_configure_host('your-server.com', [
+    'remote_user' => 'deploy',
+    'branch'      => 'main',
+    'http_user'   => 'www-data',
+    'http_group'  => 'www-data',
 ]);
 
-klytron_configure_host('myapp.com', [
-    'remote_user' => 'root',
-    'http_user' => 'www-data',
-]);
+klytron_configure_shared_files(['.env']);
+klytron_configure_shared_dirs(['uploads', 'cache', 'logs']);
+klytron_configure_writable_dirs(['uploads', 'cache', 'logs']);
 
 task('deploy', [
-    'deploy:prepare',
+    'klytron:deploy:start_timer',
+    'deploy:unlock',
+    'klytron:deploy:fix_repo',
+    'deploy:setup',
+    'deploy:lock',
     'deploy:release',
     'deploy:update_code',
+    'deploy:shared',
+    'klytron:upload:env:production',
     'deploy:vendors',
+    'deploy:writable',
     'deploy:symlink',
+    'klytron:deploy:access_permissions',
+    'deploy:unlock',
     'deploy:cleanup',
-])->desc('Deploy my PHP application');
+    'klytron:deploy:end_timer',
+])->desc('Deploy to production');
 ```
 
-## Step 3: Test Configuration
+> **Template files** — copy a template instead of writing from scratch:
+> - `vendor/klytron/php-deployment-kit/templates/laravel-deploy.php.template`
+> - `vendor/klytron/php-deployment-kit/templates/simple-php.php.template`
+> - `vendor/klytron/php-deployment-kit/templates/deploy.php.template` (generic)
+
+## Step 3: Deploy
 
 ```bash
-# Test the configuration
-vendor/bin/dep test
-
-# List available tasks
-vendor/bin/dep list
-
-# Check deployment dry-run
-vendor/bin/dep deploy --dry-run
-```
-
-## Step 4: Deploy
-
-```bash
-# Deploy your application
+# Run the deployment
 vendor/bin/dep deploy
 
-# Deploy to specific host
-vendor/bin/dep deploy your-domain.com
+# Dry-run (plan without executing)
+vendor/bin/dep deploy --dry-run
 
-# Deploy with verbose output
+# Verbose output
 vendor/bin/dep deploy -v
 ```
 
-## Step 5: Verify Deployment
+## Common project configurations
 
-```bash
-# Check current release
-vendor/bin/dep current
-
-# List all releases
-vendor/bin/dep releases
-```
-
-## Common Configuration Examples
-
-### Laravel with MariaDB
+### Laravel with Vite (no database)
 
 ```php
 klytron_configure_project([
-    'type' => 'laravel',
-    'database' => 'mariadb',
-    'env_file_local' => '.env.production',
-    'env_file_remote' => '.env',
-    'supports_vite' => true,
+    'type'                  => 'laravel',
+    'database'              => 'none',
+    'env_file_local'        => '.env.production',
+    'env_file_remote'       => '.env',
+    'supports_nodejs'       => true,
+    'supports_vite'         => true,
     'supports_storage_link' => true,
-    'supports_sitemap' => true,
+    'verify_fonts'          => true,
 ]);
 ```
 
-### Laravel API with PostgreSQL
+### Laravel API with PostgreSQL + Passport
 
 ```php
 klytron_configure_project([
-    'type' => 'laravel',
-    'database' => 'postgresql',
-    'env_file_local' => '.env.production',
-    'env_file_remote' => '.env',
+    'type'              => 'laravel',
+    'database'          => 'postgresql',
+    'env_file_local'    => '.env.production',
+    'env_file_remote'   => '.env',
     'supports_passport' => true,
-    'supports_vite' => true,
+    'supports_vite'     => false,
 ]);
 ```
 
-## Laravel Environment File Encryption
-
-The PHP Deployment Kit supports Laravel's built-in environment file encryption for secure secret management.
-
-### How It Works
-
-1. **Local Development**: You edit normal `.env` and `.env.production` files
-2. **Encryption**: Files are encrypted to `.env.encrypted` and `.env.production.encrypted`
-3. **Git Storage**: Only encrypted files are committed (plaintext is gitignored)
-4. **Deployment**: Automatic decryption before upload using `LARAVEL_ENV_ENCRYPTION_KEY`
-
-### Setup
-
-#### 1. Configure Encryption in deploy.php
+### Laravel with encrypted .env
 
 ```php
-// Enable environment file encryption
-set('env_encryption_environments', ['production', 'local']);
-set('env_encryption_force', true);
-
-// Configure which files to use
 klytron_configure_project([
-    'type' => 'laravel',
-    'env_file_local' => '.env.production',   // Local file to upload
-    'env_file_remote' => '.env',               // Remote filename
-    // ... other options
+    'type'              => 'laravel',
+    'database'          => 'mysql',
+    'env_file_local'    => '.env.production',
+    'env_file_remote'   => '.env',
+    'enable_encryption' => true,  // Reads LARAVEL_ENV_ENCRYPTION_KEY env var
 ]);
 ```
 
-#### 2. Store Encryption Key in Gopass
+To use encryption, export your key before deploying:
 
 ```bash
-# Generate or retrieve your Laravel env encryption key
-# Store it in gopass for secure access
-gopass insert Apps/laravel/laravel-env-encryption-key
-```
-
-#### 3. Encrypt Your Environment Files
-
-```bash
-# Export the key for the current session
 export LARAVEL_ENV_ENCRYPTION_KEY="$(gopass show -o Apps/laravel/laravel-env-encryption-key)"
-
-# Encrypt local .env
-ddev php artisan env:encrypt --readable
-
-# Encrypt production .env
-ddev php artisan env:encrypt --env=production --readable
-
-# Commit only encrypted files
-git add -A
-git commit -m "chore: update encrypted environment files"
-git push
+vendor/bin/dep deploy
 ```
 
-### Deployment Workflow
+## Unattended / CI deployments
 
-```bash
-# 1. Export the encryption key
-export LARAVEL_ENV_ENCRYPTION_KEY="$(gopass show -o Apps/laravel/laravel-env-encryption-key)"
+Add these to `deploy.php` to skip interactive prompts:
 
-# 2. Run deployment (automatic decryption happens before upload)
-ddev exec vendor/bin/dep deploy
+```php
+set('auto_confirm_production', true);
+set('auto_deployment_type', 'update');        // 'update' | 'fresh'
+set('auto_upload_env', true);
+set('auto_database_operation', 'migrations'); // 'migrations'|'import'|'both'|'none'
+set('auto_clear_caches', true);
+set('auto_confirm_settings', true);
 ```
 
-The deployment kit automatically:
-1. Checks if `.env.production` exists locally
-2. If missing, decrypts from `.env.production.encrypted`
-3. Uploads the decrypted file to the server
-4. Server-side decryption happens if encrypted file exists on server
+## Server config files
 
-### Manual Decryption (if needed)
+Copy environment-specific files from your repo into each release automatically:
 
-```bash
-# Decrypt production environment
-export LARAVEL_ENV_ENCRYPTION_KEY="$(gopass show -o Apps/laravel/laravel-env-encryption-key)"
-ddev php artisan env:decrypt --env=production --force
+```php
+set('server_config_files', [
+    [
+        'source'    => 'server/.htaccess.production',
+        'target'    => 'public/.htaccess',
+        'mode'      => 0644,
+        'overwrite' => true,
+    ],
+]);
 
-# Or use the deployment task
-vendor/bin/dep klytron:laravel:local:env:ensure_decrypted
+after('deploy:shared', 'klytron:server:deploy:configs');
 ```
-
-### Security Best Practices
-
-- ✅ Never commit `.env` or `.env.production` (only `.env.encrypted`)
-- ✅ Store `LARAVEL_ENV_ENCRYPTION_KEY` in gopass, never in code
-- ✅ Export key only for the current shell session
-- ✅ Use `--readable` flag when encrypting for version control diffs
-- ✅ Rotate encryption keys periodically
-
----
 
 ## Troubleshooting
 
-### SSH Connection Failed
+| Problem | Solution |
+|---|---|
+| SSH connection failed | Test with `ssh user@server.com` first |
+| Permission denied | Check `http_user`/`http_group` match your web server |
+| deploy.lock exists | Run `vendor/bin/dep deploy:unlock` |
+| Git safe-directory error | The `klytron:deploy:fix_repo` task handles this automatically |
 
-```bash
-# Test SSH connection
-ssh user@your-domain.com
-
-# Check SSH key
-ls -la ~/.ssh/
-```
-
-### Permission Denied
-
-```bash
-# Check server permissions
-vendor/bin/dep test
-
-# Fix permissions on server
-sudo chown -R www-data:www-data /var/www/html
-```
-
-### Need Help?
-
-- [Documentation](docs/)
-- [Configuration Reference](docs/configuration-reference.md)
-- [GitHub Issues](https://github.com/klytron/php-deployment-kit/issues)
+- [Configuration Reference](configuration-reference.md) — every option explained
+- [Task Reference](task-reference.md) — every available task
+- [Troubleshooting Guide](troubleshooting.md)
