@@ -89,8 +89,8 @@ class AssetMappingTask
                         $targetDir = dirname($targetFile);
                         run("mkdir -p \"$targetDir\"");
                         
-                        // Create symbolic link
-                        return run("ln -sf \"$sourceFile\" \"$targetFile\"");
+                        // Create a physical copy to avoid symlink issues
+                        return run("cp -p \"$sourceFile\" \"$targetFile\"");
                     });
                     
                     if ($success) {

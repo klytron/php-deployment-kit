@@ -27,8 +27,12 @@ class DeploymentMetricsService
 
     public static function endDeployment(): void
     {
+        // Try to get start time from Deployer state first, fallback to static property
+        $deployerStartTime = function_exists('Deployer\get') ? get('deploy_start_time', 0) : 0;
+        $actualStartTime = $deployerStartTime > 0 ? $deployerStartTime : self::$startTime;
+        
         $endTime = microtime(true);
-        $duration = $endTime - self::$startTime;
+        $duration = $endTime - $actualStartTime;
         
         self::$metrics['deployment_end_time'] = date('Y-m-d H:i:s');
         self::$metrics['deployment_duration'] = round($duration, 2);
