@@ -90,7 +90,8 @@ class AssetMappingTask
                         run("mkdir -p \"$targetDir\"");
                         
                         // Create a physical copy to avoid symlink issues
-                        return run("cp -p \"$sourceFile\" \"$targetFile\"");
+                        run("cp -p \"$sourceFile\" \"$targetFile\"");
+                        return true;
                     });
                     
                     if ($success) {
