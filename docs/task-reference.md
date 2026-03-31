@@ -744,6 +744,53 @@ vendor/bin/dep status
 vendor/bin/dep rollback
 ```
 
+## 🎯 Klytron Utility Tasks
+
+### `klytron:deploy:start_timer`
+
+Starts the deployment timer and displays the start timestamp.
+
+**Usage:**
+```php
+task('deploy', [
+    'klytron:deploy:start_timer',
+    // ... other tasks
+])->desc('Deploy application');
+```
+
+**Output:**
+```
+⏱️ Deployment started at 2026-03-31 13:23:05
+```
+
+**What it does:**
+- Records the deployment start time
+- Displays the start timestamp
+- Initializes deployment metrics tracking
+
+### `klytron:deploy:end_timer`
+
+Ends the deployment timer and displays completion information.
+
+**Usage:**
+```php
+task('deploy', [
+    // ... other tasks
+    'klytron:deploy:end_timer',
+])->desc('Deploy application');
+```
+
+**Output:**
+```
+⏱️ Deployment completed at 2026-03-31 13:33:05
+⏱️ Deployment completed in 10m 0s
+```
+
+**What it does:**
+- Calculates deployment duration
+- Displays the completion timestamp
+- Shows the total time taken
+
 ## 🎯 Task Configuration
 
 ### Task Timeouts

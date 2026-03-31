@@ -74,6 +74,8 @@ task('klytron:deploy:end_timer', function () {
     $minutes = floor($duration / 60);
     $seconds = $duration % 60;
 
+    info("⏱️ Deployment completed at " . date('Y-m-d H:i:s', $endTime));
+
     if ($minutes > 0) {
         info("⏱️ Deployment completed in {$minutes}m {$seconds}s");
     } else {
