@@ -1,7 +1,6 @@
 {
   "name": "klytron/php-deployment-kit",
   "description": "A comprehensive deployment library for PHP applications built on Deployer. Supports Laravel, Yii2, and simple PHP applications.",
-  "version": "1.0.2",
   "type": "library",
   "keywords": [
     "deployer",
