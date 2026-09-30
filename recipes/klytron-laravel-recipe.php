@@ -19,9 +19,13 @@ if (file_exists('vendor/deployer/deployer/recipe/laravel.php')) {
     throw new \RuntimeException('Laravel recipe not found. Please ensure Deployer is properly installed.');
 }
 
-// Override Deployer provision's interactive ask() closure
-set('php_version', '8.3');
-set('klytron_php_version', 'php8.3');
+// Override Deployer provision's interactive ask() closure to prevent hangs
+if (!has('php_version') || is_callable(get('php_version'))) {
+    set('php_version', '8.3');
+}
+if (!has('klytron_php_version')) {
+    set('klytron_php_version', 'php8.3');
+}
 
 // Load core framework-agnostic tasks
 require_once __DIR__ . '/../klytron-tasks.php';

@@ -496,7 +496,6 @@ Set the Yii2 API public HTML directory.
 ```php
 klytron_yii2_set_api_public_html('/var/www/html/web');
 ```
-```
 
 ### Simple PHP Project Setup
 
@@ -516,6 +515,44 @@ klytron_configure_host('my-server.com', [
     'http_user' => 'www-data',
 ]);
 ```
+
+## 🔄 Deployment Flow Functions
+
+### `klytron_deploy_flow(): array`
+
+Returns the framework-agnostic deployment task sequence.
+
+```php
+task('deploy', klytron_deploy_flow())->desc('Deploy project');
+```
+
+The flow executes the following tasks in order:
+1. `deploy:start_timer`
+2. `klytron:validate:basic`
+3. `deploy:unlock`
+4. `deploy:fix_repo`
+5. `klytron:deploy:prepare:complete`
+6. `deploy:setup`
+7. `deploy:lock`
+8. `deploy:release`
+9. `deploy:update_code`
+10. `deploy:shared`
+11. `klytron:deploy:environment:complete`
+12. `deploy:env`
+13. `deploy:vendors`
+14. `deploy:writable`
+15. `deploy:symlink`
+16. `klytron:deploy:finalize:complete`
+17. `deploy:unlock`
+18. `deploy:cleanup`
+19. `klytron:deploy:notify:complete`
+20. `deploy:end_timer`
+
+### `klytron_deploy_flow_minimal(): array`
+*(Deprecated)* Alias for `klytron_deploy_flow()`. Use `klytron_deploy_flow()` directly.
+
+### `klytron_deploy_flow_php(): array`
+*(Deprecated)* Alias for `klytron_deploy_flow()`. Use `klytron_deploy_flow()` directly.
 
 ## 🎯 Usage Examples
 

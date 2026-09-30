@@ -5,6 +5,31 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-09-30
+
+Maintenance and hardening release addressing edge cases, security enhancements, and codebase modernization.
+
+### Fixed
+
+- **Database Import Flag Typo**: Fixed `shouldIMportDbFile` typo to `shouldImportDbFile` in default core configuration, aligning with the Laravel recipe's expectation.
+- **Laravel Permission Scoping**: Corrected `klytron:deploy:access_permissions` condition from `has('laravel')` to `get('project_type', '') === 'laravel'` so storage and cache permission sweeps trigger reliably.
+- **PHP-FPM Default Version**: Changed default PHP version in `klytron:fpm:reload` from `8.4` to `8.3` to maintain consistency across core configurations.
+- **Web Server User Permissions**: Updated `klytron:deploy:access_permissions` to respect `http_user` configuration rather than falling back to hardcoded `www-data`.
+- **PHP Version Preserved in Laravel Recipe**: Safeguarded `recipes/klytron-laravel-recipe.php` so user-configured PHP versions are preserved while still neutralizing Deployer provision's interactive `ask()` prompt.
+- **Cleaned Orphan Docblocks & Stale Version Strings**: Removed stacked docblocks and updated `@version` annotations to `1.1.1`.
+
+### Security & Hardening
+
+- **Secure Database Backups**: Hardened `mysqldump` command in `klytron:deploy:backup:create` using `MYSQL_PWD` environment variable to prevent password disclosure in process listings (`ps aux`).
+- **Restricted Cleanup Scope**: Removed speculative directory probing of `/var/www`, `/opt`, and home directories in `klytron:delete:project`, strictly scoping cleanup to `deploy_path`.
+- **Conditional Pseudo-Terminal Allocation**: Updated `klytron_configure_host` to only allocate `-t` (pseudo-terminal) when `writable_use_sudo` is enabled or explicitly requested via `ssh_arguments`, preventing SSH pseudo-terminal allocation errors in non-interactive CI/CD runners.
+
+### Changed & Modernized
+
+- **Modern String Functions**: Modernized string checks from `strpos()` to `str_contains()` and `str_starts_with()` across core and task implementations for PHP 8.1+.
+- **Consolidated Deployment Flows**: Consolidated duplicate flow definitions (`klytron_deploy_flow_minimal()` and `klytron_deploy_flow_php()`), making them clean deprecated aliases pointing to `klytron_deploy_flow()`.
+- **Hidden Stub Tasks**: Tagged 9 placeholder metrics and environment decryption tasks with `->hidden()` to keep `dep list` clean and uncluttered.
+
 ## [1.1.0] - 2026-09-30
 
 Major release introducing ultra-fast deployment optimizations (reducing release durations from 15+ minutes down to 30–60 seconds), native Filament v5 support, dynamic environment-driven host configuration, and CI dry-run validation.

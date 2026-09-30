@@ -100,9 +100,6 @@ task('klytron:validate:deploy_path_parent', function () {
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
- * Fix repository cache issues and permissions
- */
-/**
  * Check if local git branch has unpushed commits
  * Prevents deploying stale code from the remote repository
  */
@@ -244,8 +241,8 @@ task('klytron:node:build', function () {
     if (test("[ -f '{{release_path}}/package.json' ]")) {
         $packageJson = run("cat {{release_path}}/package.json");
     }
-    $hasBuildScript = strpos($packageJson, '"build"') !== false;
-    $hasProductionScript = strpos($packageJson, '"production"') !== false;
+    $hasBuildScript = str_contains($packageJson, '"build"');
+    $hasProductionScript = str_contains($packageJson, '"production"');
 
     if ($hasViteConfig && $hasBuildScript) {
         info("✅ Vite configuration detected - using Vite build system");
@@ -380,11 +377,11 @@ task('klytron:node:vite:build', function () {
 
         foreach ($lines as $line) {
             $line = trim($line);
-            if (empty($line) || strpos($line, '#') === 0) {
+            if (empty($line) || str_starts_with($line, '#')) {
                 continue;
             }
 
-            if (strpos($line, '=') !== false) {
+            if (str_contains($line, '=')) {
                 [$key, $value] = explode('=', $line, 2);
                 $key = trim($key);
                 $value = trim($value, "\"'{}");
@@ -496,7 +493,7 @@ task('klytron:deploy:info', function () {
  * Reload PHP-FPM service (graceful reload to clear OPcache)
  */
 task('klytron:fpm:reload', function () {
-    $phpVersion = get('php_version', '8.4');
+    $phpVersion = get('php_version', '8.3');
     info("🔄 Reloading PHP-FPM (php{$phpVersion}-fpm)...");
     try {
         run("sudo systemctl reload php{$phpVersion}-fpm 2>/dev/null || sudo systemctl reload php-fpm 2>/dev/null || sudo service php{$phpVersion}-fpm reload 2>/dev/null || true");
@@ -529,7 +526,7 @@ task('klytron:deploy:access_permissions', function () {
     // Get user and group from configuration
     $httpUser = get('http_user', 'www-data');
     $httpGroup = get('http_group', 'www-data');
-    $webServerUser = 'www-data';
+    $webServerUser = $httpUser;
     
     // Get default permissions from configuration
     $filePerms = get('default_file_permissions', 0644);
@@ -538,7 +535,7 @@ task('klytron:deploy:access_permissions', function () {
     $dirPermsOct = decoct($dirPerms);
 
     // Add web server user to the http_group if different
-    if ($httpGroup !== 'www-data' && $httpGroup !== $webServerUser) {
+    if ($httpGroup !== $webServerUser) {
         run("sudo usermod -a -G $httpGroup $webServerUser 2>/dev/null || true");
     }
 
@@ -572,7 +569,7 @@ task('klytron:deploy:access_permissions', function () {
     }
 
     // Special handling for storage and bootstrap/cache in Laravel
-    if (has('laravel')) {
+    if (get('project_type', '') === 'laravel') {
         $storagePerms = get('laravel_storage_permissions', 0775);
         $cachePerms = get('laravel_cache_permissions', 0775);
         
@@ -881,7 +878,7 @@ task('klytron:deploy:backup:create', function () {
                     switch ($dbConnection) {
                         case 'mysql':
                         case 'mariadb':
-                            run("mysqldump -h '$dbHost' -P '$dbPort' -u '$dbUser' -p'$dbPass' '$dbName' > '$dbBackupFile'");
+                            run("MYSQL_PWD='$dbPass' mysqldump -h '$dbHost' -P '$dbPort' -u '$dbUser' '$dbName' > '$dbBackupFile'");
                             break;
                         case 'postgresql':
                             run("PGPASSWORD='$dbPass' pg_dump -h '$dbHost' -p '$dbPort' -U '$dbUser' '$dbName' > '$dbBackupFile'");
@@ -1140,28 +1137,6 @@ task('klytron:delete:project', function () {
             info("ℹ️  Project directory does not exist: {{deploy_path}}");
         }
         
-        // Also check for any related directories that might exist
-        $projectName = get('application');
-        if ($projectName) {
-            $possiblePaths = [
-                "/var/www/$projectName",
-                "/opt/$projectName",
-                get('deploy_path_parent', '{{deploy_path}}/..') . "/$projectName",
-                '~/' . get('remote_user', 'deploy') . "/$projectName"
-            ];
-            
-            foreach ($possiblePaths as $path) {
-                if (test("[ -d $path ]")) {
-                    info("🗑️  Found additional project directory: $path");
-                    $remove = askConfirmation("Delete additional directory: $path?", false);
-                    if ($remove) {
-                        run("rm -rf $path");
-                        info("✅ Deleted: $path");
-                    }
-                }
-            }
-        }
-        
         info("✅ Project deletion completed successfully!");
         info("🆆 You can now run a fresh deployment with: vendor/bin/dep deploy");
         
@@ -1276,35 +1251,35 @@ task('klytron:images:optimize', function () {
  */
 task('klytron:metrics:display', function () {
     info("⏭️  Skipping metrics display - task not available in current configuration");
-})->desc('Display deployment metrics summary (disabled)');
+})->desc('Display deployment metrics summary (disabled)')->hidden();
 
 /**
  * Export metrics to file for analysis
  */
 task('klytron:metrics:export', function () {
     info("⏭️  Skipping metrics export - task not available in current configuration");
-})->desc('Export deployment metrics to file (disabled)');
+})->desc('Export deployment metrics to file (disabled)')->hidden();
 
 /**
  * Compare with previous deployment metrics
  */
 task('klytron:metrics:compare', function () {
     info("⏭️  Skipping metrics comparison - task not available in current configuration");
-})->desc('Compare with previous deployment metrics (disabled)');
+})->desc('Compare with previous deployment metrics (disabled)')->hidden();
 
 /**
  * Start deployment metrics collection
  */
 task('klytron:metrics:start', function () {
     info("⏭️  Skipping metrics collection - task not available in current configuration");
-})->desc('Start deployment metrics collection (disabled)');
+})->desc('Start deployment metrics collection (disabled)')->hidden();
 
 /**
  * End deployment metrics collection
  */
 task('klytron:metrics:end', function () {
     info("⏭️  Skipping metrics collection - task not available in current configuration");
-})->desc('End deployment metrics collection (disabled)');
+})->desc('End deployment metrics collection (disabled)')->hidden();
 
 ///////////////////////////////////////////////////////////////////////////////
 // ENVIRONMENT DECRYPTION TASKS
@@ -1315,25 +1290,25 @@ task('klytron:metrics:end', function () {
  */
 task('klytron:env:decrypt', function () {
     info("⏭️  Skipping env decryption - task not available in current configuration");
-})->desc('Decrypt environment files (disabled)');
+})->desc('Decrypt environment files (disabled)')->hidden();
 
 /**
  * Decrypt specific environment file
  */
 task('klytron:env:decrypt:production', function () {
     info("⏭️  Skipping env decryption - task not available in current configuration");
-})->desc('Decrypt production environment file (disabled)');
+})->desc('Decrypt production environment file (disabled)')->hidden();
 
 /**
  * Validate encrypted environment files
  */
 task('klytron:env:validate', function () {
     info("⏭️  Skipping env validation - task not available in current configuration");
-})->desc('Validate encrypted environment files (disabled)');
+})->desc('Validate encrypted environment files (disabled)')->hidden();
 
 /**
  * Setup environment decryption
  */
 task('klytron:env:setup', function () {
     info("⏭️  Skipping env setup - task not available in current configuration");
-})->desc('Setup environment decryption configuration (disabled)');
+})->desc('Setup environment decryption configuration (disabled)')->hidden();

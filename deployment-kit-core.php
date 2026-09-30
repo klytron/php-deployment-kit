@@ -7,7 +7,7 @@
  * Extracted from battle-tested deployment configurations
  * 
  * @package Klytron\PhpDeploymentKit
- * @version 1.0
+ * @version 1.1.1
  * @author Michael K. Laweh (klytron) (https://www.klytron.com)
  */
 
@@ -142,7 +142,7 @@ if (!get('klytron_deployer_loaded', false)) {
     // Default deployment configuration variables
     set('shouldRunMigration', false);
     set('shouldResetDatabase', false);
-    set('shouldIMportDbFile', false);
+    set('shouldImportDbFile', false);
     set('shouldRunSeeder', false);
     set('shouldBackupBeforeDeployment', false);
     set('shouldRunPassportInstall', false);
@@ -403,25 +403,25 @@ if (!get('klytron_deployer_loaded', false)) {
      * Resolve path placeholders (${APP_URL_DOMAIN}, ${APP_NAME}, ${STAGE}, ${PHP_VERSION})
      */
     function klytron_resolve_placeholders(string $path): string {
-        if (strpos($path, '$') === false) {
+        if (!str_contains($path, '$')) {
             return $path;
         }
 
         $replacements = [];
 
-        if (strpos($path, '${APP_URL_DOMAIN}') !== false) {
+        if (str_contains($path, '${APP_URL_DOMAIN}')) {
             $replacements['${APP_URL_DOMAIN}'] = (string) get('application_public_domain', '');
         }
 
-        if (strpos($path, '${APP_NAME}') !== false) {
+        if (str_contains($path, '${APP_NAME}')) {
             $replacements['${APP_NAME}'] = (string) get('application', '');
         }
 
-        if (strpos($path, '${STAGE}') !== false) {
+        if (str_contains($path, '${STAGE}')) {
             $replacements['${STAGE}'] = (string) get('stage', 'production');
         }
 
-        if (strpos($path, '${PHP_VERSION}') !== false) {
+        if (str_contains($path, '${PHP_VERSION}')) {
             $phpVer = get('klytron_php_version', '8.3');
             if (is_callable($phpVer)) {
                 $phpVer = '8.3';
@@ -484,7 +484,7 @@ if (!get('klytron_deployer_loaded', false)) {
             
             // Resolve any placeholders that are already known
             $resolved = klytron_resolve_placeholders($publicHtml);
-            if (strpos($resolved, '${') === false) {
+            if (!str_contains($resolved, '${')) {
                 set('application_public_html', $resolved);
             }
         }
@@ -603,12 +603,12 @@ if (!get('klytron_deployer_loaded', false)) {
         // Set SSH key
         $host->set('identity_file', '{{sshKey}}');
 
-        // Web server user will be handled by klytron:deploy:access_permissions task
-        $httpGroup = $hostConfig['http_group'];
-        $webServerUser = 'www-data'; // Default web server user
-
-        // Set SSH options using the correct method for this Deployer version
-        $host->set('ssh_arguments', ['-t']); // Force pseudo-terminal allocation for sudo
+        // Set SSH options - only force TTY when sudo is required, or use caller-provided options
+        if (isset($config['ssh_arguments'])) {
+            $host->set('ssh_arguments', (array) $config['ssh_arguments']);
+        } elseif (!empty($hostConfig['writable_use_sudo'])) {
+            $host->set('ssh_arguments', ['-t']);
+        }
 
         return $host;
     }
@@ -776,58 +776,18 @@ if (!get('klytron_deployer_loaded', false)) {
 
     /**
      * Get a minimal deployment flow (for simple PHP projects)
+     * @deprecated Use klytron_deploy_flow() instead
      */
     function klytron_deploy_flow_minimal(): array {
-        return [
-            'deploy:start_timer',
-            'klytron:validate:basic',                    // Framework-agnostic validation
-            'deploy:unlock',
-            'deploy:fix_repo',
-            'klytron:deploy:prepare:complete',           // Framework-agnostic preparation
-            'deploy:setup',
-            'deploy:lock',
-            'deploy:release',
-            'deploy:update_code',
-            'deploy:shared',
-            'klytron:deploy:environment:complete',       // Framework-agnostic env deployment
-            'deploy:env',
-            'deploy:vendors',
-            'deploy:writable',
-            'deploy:symlink',
-            'klytron:deploy:finalize:complete',          // Framework-agnostic finalization
-            'deploy:unlock',
-            'deploy:cleanup',
-            'klytron:deploy:notify:complete',            // Framework-agnostic success notification
-            'deploy:end_timer',
-        ];
+        return klytron_deploy_flow();
     }
 
     /**
      * Get the PHP deployment flow (framework-agnostic)
+     * @deprecated Use klytron_deploy_flow() instead
      */
     function klytron_deploy_flow_php(): array {
-        return [
-            'deploy:start_timer',
-            'klytron:validate:basic',                    // Framework-agnostic validation
-            'deploy:unlock',
-            'deploy:fix_repo',
-            'klytron:deploy:prepare:complete',           // Framework-agnostic preparation
-            'deploy:setup',
-            'deploy:lock',
-            'deploy:release',
-            'deploy:update_code',
-            'deploy:shared',
-            'klytron:deploy:environment:complete',       // Framework-agnostic env deployment
-            'deploy:env',
-            'deploy:vendors',
-            'deploy:writable',
-            'deploy:symlink',
-            'klytron:deploy:finalize:complete',          // Framework-agnostic finalization
-            'deploy:unlock',
-            'deploy:cleanup',
-            'klytron:deploy:notify:complete',            // Framework-agnostic success notification
-            'deploy:end_timer',
-        ];
+        return klytron_deploy_flow();
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -839,7 +799,7 @@ if (!get('klytron_deployer_loaded', false)) {
 
     // Show loading message
     try {
-        writeln("🚀 <info>Klytron Deployer v1.0 loaded</info>");
+        writeln("🚀 <info>Klytron Deployer v1.1.1 loaded</info>");
         writeln("📚 <comment>Use 'dep klytron:help' for available commands</comment>");
     } catch (\Exception $e) {
         // Silently ignore if output fails
