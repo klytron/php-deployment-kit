@@ -518,38 +518,40 @@ klytron_configure_environment([
 
 ## ⚡ Performance Issues
 
-### Issue: Slow deployment
+### Issue: Slow deployment (deployments taking 10–15+ minutes)
 
 **Symptoms:**
-- Deployment takes too long
-- File transfer is slow
-- Operations timeout
+- Deployments take 15–20 minutes instead of seconds.
+- Long stalls during `deploy:vendors` (Composer install).
+- Long stalls during `klytron:laravel:node:vite:build` (npm install).
+- Long stalls during `klytron:deploy:access_permissions`.
+- Long stalls during `deploy:update_code`.
 
-**Solutions:**
+**Root Causes & Solutions (Built into v1.1.0+):**
 
-```bash
-# Enable SSH multiplexing
-vendor/bin/dep deploy --ssh-multiplexing
+1. **Destructive Git Cache Purging**:
+   - *Previous cause*: Custom scripts or older tasks executing `rm -rf {{deploy_path}}/.dep/repo` on every deploy, forcing Git to re-clone the entire repository over the internet.
+   - *Fix*: `klytron:deploy:fix_repo` only clears stale `index.lock` files. Never delete `.dep/repo` unless explicitly troubleshooting via `klytron:deploy:clean_repo`.
 
-# Use parallel deployment
-vendor/bin/dep deploy --parallel
+2. **Uncached Composer Dependencies**:
+   - *Previous cause*: Every release performed a full download of all vendor packages.
+   - *Fix*: The kit's `klytron:cache:vendor` task automatically reuses `vendor/` from the previous release via hardlinks (`cp -al`). Composer only downloads diffs, dropping install times from 3 minutes to ~2 seconds.
 
-# Optimize file transfer
-vendor/bin/dep deploy --optimize
-```
+3. **Uncached npm / Vite Builds**:
+   - *Previous cause*: Every release ran `npm install` on the remote server across hundreds of megabytes of node modules.
+   - *Fix*: `klytron:laravel:node:vite:build` reuses `node_modules` from the previous release via hardlinks and hashes `package-lock.json`. If unchanged, it skips `npm install` completely and runs Vite directly.
 
-**Configuration fix:**
-```php
-// Performance optimization
-klytron_configure_deployment([
-    'ssh_multiplexing' => true,
-    'parallel' => true,
-    'optimize' => true,
-    'shared_files' => ['.env'],
-    'shared_dirs' => ['storage', 'public/uploads'],
-    'writable_dirs' => ['storage', 'bootstrap/cache'],
-]);
-```
+4. **Sequential `sudo` Subshell Explosion**:
+   - *Previous cause*: Permissions commands using `find ... -exec sudo chmod g+s {} \;`. Spawning an independent `sudo` process for every directory (3,000–5,000 dirs in `vendor/`) takes 5+ minutes alone.
+   - *Fix*: `klytron:deploy:access_permissions` batches directory updates with `find ... -exec sudo chmod g+s,0755 {} +` and scopes sweeps strictly to `{{release_or_current_path}}` and `shared/storage`.
+
+5. **Pruning Unnecessary Tasks**:
+   - Remove database migration tasks if your project has `'database' => 'none'`.
+   - Remove sitemap or image optimization tasks if your project does not generate them.
+
+**Expected Speed with v1.1.0:**
+- Routine code updates: **30–60 seconds** total deployment time.
+- Releases with asset changes: **1.5–2.5 minutes**.
 
 ### Issue: Memory issues
 

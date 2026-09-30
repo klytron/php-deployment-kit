@@ -40,6 +40,10 @@ if (!get('klytron_deployer_loaded', false)) {
     // Load standard deployer recipes automatically
     // This ensures all projects have access to standard deployment tasks
     require 'recipe/common.php';
+
+    // Override Deployer provision's interactive ask() closure with a safe non-interactive default
+    set('php_version', '8.3');
+    set('klytron_php_version', 'php8.3');
     
     // Load server configuration recipe
     $serverRecipePath = __DIR__ . '/recipes/klytron-server-recipe.php';
@@ -385,6 +389,7 @@ if (!get('klytron_deployer_loaded', false)) {
      * Set PHP version for the deployment
      */
     function klytron_set_php_version(string $version): void {
+        set('klytron_php_version', $version);
         set('bin/php', function () use ($version) {
             return run("which /usr/bin/$version || which $version");
         });
@@ -395,7 +400,51 @@ if (!get('klytron_deployer_loaded', false)) {
     }
 
     /**
-     * Set domain configuration
+     * Resolve path placeholders (${APP_URL_DOMAIN}, ${APP_NAME}, ${STAGE}, ${PHP_VERSION})
+     */
+    function klytron_resolve_placeholders(string $path): string {
+        if (strpos($path, '$') === false) {
+            return $path;
+        }
+
+        $replacements = [];
+
+        if (strpos($path, '${APP_URL_DOMAIN}') !== false) {
+            $replacements['${APP_URL_DOMAIN}'] = (string) get('application_public_domain', '');
+        }
+
+        if (strpos($path, '${APP_NAME}') !== false) {
+            $replacements['${APP_NAME}'] = (string) get('application', '');
+        }
+
+        if (strpos($path, '${STAGE}') !== false) {
+            $replacements['${STAGE}'] = (string) get('stage', 'production');
+        }
+
+        if (strpos($path, '${PHP_VERSION}') !== false) {
+            $phpVer = get('klytron_php_version', '8.3');
+            if (is_callable($phpVer)) {
+                $phpVer = '8.3';
+            }
+            $replacements['${PHP_VERSION}'] = (string) $phpVer;
+        }
+
+        return strtr($path, $replacements);
+    }
+
+    /**
+     * Get a resolved path for a configuration key after interpolating placeholders
+     */
+    function klytron_get_resolved_path(string $key): string {
+        $val = get($key, '');
+        if (empty($val) && $key === 'public_html') {
+            $val = get('application_public_html', get('application_public_html_template', ''));
+        }
+        return klytron_resolve_placeholders($val);
+    }
+
+    /**
+     * Set domain configuration and resolve any templated paths
      */
     function klytron_set_domain(string $domain): void {
         set('application_public_domain', $domain);
@@ -403,22 +452,21 @@ if (!get('klytron_deployer_loaded', false)) {
         
         // Auto-resolve public HTML path if template exists
         $publicHtmlTemplate = get('application_public_html_template', '');
-        if (!empty($publicHtmlTemplate) && strpos($publicHtmlTemplate, '${APP_URL_DOMAIN}') !== false) {
-            $resolvedPath = str_replace('${APP_URL_DOMAIN}', $domain, $publicHtmlTemplate);
+        if (!empty($publicHtmlTemplate)) {
+            $resolvedPath = klytron_resolve_placeholders($publicHtmlTemplate);
             set('application_public_html', $resolvedPath);
         }
     }
 
     /**
-     * Get the resolved public HTML path (with domain interpolation if needed)
+     * Get the resolved public HTML path (with domain and placeholder interpolation)
      */
     function klytron_get_public_html_path(): string {
         $publicHtmlPath = get('application_public_html', '');
         if (empty($publicHtmlPath)) {
             $template = get('application_public_html_template', '');
-            $domain = get('application_public_domain', '');
-            if (!empty($template) && !empty($domain)) {
-                $publicHtmlPath = str_replace('${APP_URL_DOMAIN}', $domain, $template);
+            if (!empty($template)) {
+                $publicHtmlPath = klytron_resolve_placeholders($template);
                 set('application_public_html', $publicHtmlPath);
             }
         }
@@ -426,17 +474,18 @@ if (!get('klytron_deployer_loaded', false)) {
     }
 
     /**
-     * Configure deployment paths
+     * Configure deployment paths with support for placeholders
      */
     function klytron_set_paths(string $parentDir, string $publicHtml = ''): void {
         set('deploy_path_parent', $parentDir);
         if (!empty($publicHtml)) {
-            // Store the template path (may contain placeholders like ${APP_URL_DOMAIN})
+            // Store the template path (may contain placeholders like ${APP_URL_DOMAIN}, ${APP_NAME}, etc.)
             set('application_public_html_template', $publicHtml);
             
-            // If no domain placeholder, set the actual path immediately
-            if (strpos($publicHtml, '${APP_URL_DOMAIN}') === false) {
-                set('application_public_html', $publicHtml);
+            // Resolve any placeholders that are already known
+            $resolved = klytron_resolve_placeholders($publicHtml);
+            if (strpos($resolved, '${') === false) {
+                set('application_public_html', $resolved);
             }
         }
     }
@@ -490,14 +539,42 @@ if (!get('klytron_deployer_loaded', false)) {
     }
 
     /**
+     * Configure host reading hostname and options from environment variables
+     * 
+     * Keeps server literals completely out of deploy.php files.
+     * Supports:
+     * - Hostname: $envVar (default: DEPLOY_HOST) with optional fallback
+     * - Remote user: DEPLOY_USER
+     * - Branch: DEPLOY_BRANCH
+     * - HTTP user: DEPLOY_HTTP_USER
+     * - HTTP group: DEPLOY_HTTP_GROUP
+     * - SSH port: DEPLOY_PORT
+     */
+    function klytron_configure_host_from_env(string $envVar = 'DEPLOY_HOST', ?string $fallback = null, array $config = []): \Deployer\Host\Host {
+        $hostname = getenv($envVar) ?: null;
+        if (empty($hostname)) {
+            $hostname = $fallback;
+        }
+
+        if (empty($hostname)) {
+            $msg = "❌ CRITICAL ERROR: Environment variable '{$envVar}' is not set and no fallback host provided.\n";
+            $msg .= "💡 Set it before deploying, for example:\n";
+            $msg .= "   export {$envVar}=your-server.example.com\n";
+            throw new \RuntimeException($msg);
+        }
+
+        return klytron_configure_host($hostname, $config);
+    }
+
+    /**
      * Configure host with project-specific settings (alternative to klytron_host)
      */
     function klytron_configure_host(string $hostname, array $config = []): \Deployer\Host\Host {
         $defaults = [
-            'remote_user' => 'root',
-            'branch' => 'main',
-            'http_user' => 'www-data',
-            'http_group' => 'www-data',
+            'remote_user' => getenv('DEPLOY_USER') ?: 'root',
+            'branch' => getenv('DEPLOY_BRANCH') ?: 'main',
+            'http_user' => getenv('DEPLOY_HTTP_USER') ?: 'www-data',
+            'http_group' => getenv('DEPLOY_HTTP_GROUP') ?: 'www-data',
             'writable_mode' => 'chmod',
             'writable_use_sudo' => false,
             'writable_chmod_mode' => '0755',
@@ -505,6 +582,10 @@ if (!get('klytron_deployer_loaded', false)) {
             'forward_agent' => true,
             'labels' => ['stage' => 'production'],
         ];
+
+        if (getenv('DEPLOY_PORT')) {
+            $defaults['port'] = (int) getenv('DEPLOY_PORT');
+        }
 
         $hostConfig = array_merge($defaults, $config);
 
@@ -561,10 +642,17 @@ if (!get('klytron_deployer_loaded', false)) {
             'public_dir_path' => null, // Will be set by framework recipes if not specified
             'shared_dir_path' => null, // Will be set by framework recipes if not specified
             'supports_passport' => false,
+            'supports_nodejs' => true,
             'supports_vite' => true,
+            'supports_mix' => false,
+            'supports_filament' => null, // null = auto-detect, bool = explicit
             'supports_storage_link' => true,
             'supports_sitemap' => false,
+            'verify_fonts' => false,
+            'cleanup_assets' => true,
+            'optimize_images' => false,
             'enable_encryption' => false, // Enable/disable env file encryption
+            'check_git_pushed' => true,
         ];
 
         $config = array_merge($defaults, $config);
@@ -586,9 +674,16 @@ if (!get('klytron_deployer_loaded', false)) {
         }
 
         set('supports_passport', $config['supports_passport']);
+        set('supports_nodejs', $config['supports_nodejs']);
         set('supports_vite', $config['supports_vite']);
+        set('supports_mix', $config['supports_mix']);
+        set('supports_filament', $config['supports_filament']);
         set('supports_storage_link', $config['supports_storage_link']);
         set('supports_sitemap', $config['supports_sitemap']);
+        set('verify_fonts', $config['verify_fonts']);
+        set('cleanup_assets', $config['cleanup_assets']);
+        set('optimize_images', $config['optimize_images']);
+        set('check_git_pushed', $config['check_git_pushed']);
         
         // Encryption configuration
         if ($config['enable_encryption']) {

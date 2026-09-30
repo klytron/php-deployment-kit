@@ -44,14 +44,28 @@ class KlytronFileDeCrypterCommand extends Command
                 $this->info("No encrypted files found in directory: {$path}");
                 return Command::SUCCESS;
             }
+            $failedFiles = [];
+            $successCount = 0;
+            $totalCount = count($files);
+
             foreach ($files as $file) {
                 $filePath = preg_replace('/\.encrypted$/', '', $file->getPathname());
                 $result = $this->processFile($filePath, $deleteOriginal);
                 if ($result !== Command::SUCCESS) {
                     $this->warn("Failed to process: {$filePath}");
+                    $failedFiles[] = $filePath . '.encrypted';
+                } else {
+                    $successCount++;
                 }
             }
-            $this->info("Batch decryption completed for directory: {$path}");
+
+            if (!empty($failedFiles)) {
+                $this->error("Batch decryption completed with errors: {$successCount}/{$totalCount} decrypted successfully, " . count($failedFiles) . " failed.");
+                $this->error("Failed files:\n  - " . implode("\n  - ", $failedFiles));
+                return Command::FAILURE;
+            }
+
+            $this->info("Batch decryption completed successfully: all {$totalCount} files decrypted.");
             return Command::SUCCESS;
         } else {
             if (!str_ends_with($absolutePath, '.encrypted')) {

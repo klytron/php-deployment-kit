@@ -39,8 +39,9 @@ klytron_set_paths(
 klytron_set_php_version('php8.3'); // PHP binary used for any php commands
 
 // ── Host ──────────────────────────────────────────────────────────────────────
-
-klytron_configure_host('your-server.com', [
+// Recommended: read host, user, branch from environment variables (zero server literals in repo)
+// Set DEPLOY_HOST before running: export DEPLOY_HOST=your-server.com
+klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
     'remote_user' => 'deploy',   // SSH user
     'branch'      => 'main',     // Git branch to deploy
     'http_user'   => 'www-data', // Web server user (for permissions)
@@ -61,6 +62,7 @@ klytron_configure_project([
     'database'         => 'none',  // mysql | mariadb | postgresql | sqlite | none
     'env_file_local'   => '.env',  // File to upload from local machine
     'env_file_remote'  => '.env',  // Destination name on server
+    'check_git_pushed' => true,
     'verify_fonts'     => false,
     'cleanup_assets'   => false,
     'optimize_images'  => false,
@@ -91,30 +93,26 @@ klytron_configure_writable_dirs([
 // Minimal flow for simple PHP projects — no Node.js, no migrations, no artisan.
 
 task('deploy', [
-    'klytron:deploy:start_timer',      // Start deployment timer
-    'deploy:unlock',                   // Clear any stale deploy lock
-    'klytron:deploy:fix_repo',         // Fix git safe-directory / permission issues
-    'deploy:setup',                    // Create directory structure on server
-    'deploy:lock',                     // Write deploy.lock
-    'deploy:release',                  // Create new release directory
-    'deploy:update_code',              // Git fetch/checkout on server
-    'deploy:shared',                   // Symlink shared files and dirs
-    'klytron:upload:env:production',   // Upload .env file
-    'deploy:vendors',                  // composer install (remove if no composer.json)
-    'deploy:writable',                 // Set directory permissions
-    'deploy:symlink',                  // Atomically switch current → new release
+    'klytron:deploy:start_timer',        // Start deployment timer
+    'deploy:unlock',                     // Clear any stale deploy lock
+    'klytron:deploy:check_pushed',       // Prevent deploying unpushed commits
+    'klytron:validate:basic',            // Verify local files exist before connecting
+    'deploy:setup',                      // Create directory structure on server
+    'deploy:lock',                       // Write deploy.lock
+    'deploy:release',                    // Create new release directory
+    'deploy:update_code',                // Git fetch/checkout on server
+    'deploy:shared',                     // Symlink shared files and dirs
+    'klytron:upload:env:production',     // Upload .env file
+    'deploy:vendors',                    // composer install (remove if no composer.json)
+    'deploy:writable',                   // Set directory permissions
+    'deploy:symlink',                    // Atomically switch current → new release
     'klytron:deploy:access_permissions', // Final ownership/permission sweep
-    'deploy:unlock',                   // Remove deploy.lock
-    'deploy:cleanup',                  // Delete old releases (keep_releases)
-    'klytron:deploy:end_timer',        // Print total elapsed time
+    'deploy:unlock',                     // Remove deploy.lock
+    'deploy:cleanup',                    // Delete old releases (keep_releases)
+    'klytron:deploy:health_check',       // Verify site responds via HTTP
+    'klytron:deploy:end_timer',          // Print total elapsed time
 ])->desc('Deploy simple PHP project to production');
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
 after('deploy:shared', 'klytron:server:deploy:configs'); // Copy any server config files
-
-// ── Guard ─────────────────────────────────────────────────────────────────────
-
-if (!file_exists('.env')) {
-    throw new \RuntimeException('.env file is required. Create it before deploying.');
-}

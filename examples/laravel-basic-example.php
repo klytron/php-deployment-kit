@@ -84,14 +84,13 @@ klytron_configure_project([
 ]);
 
 // ── Host ──────────────────────────────────────────────────────────────────────
-// Add multiple klytron_configure_host() calls for staging/production/etc.
-// Target specific hosts with: vendor/bin/dep deploy --stage=staging
-
-klytron_configure_host('your-server.com', [
-    'remote_user' => 'deploy',           // SSH user
+// Recommended: read host, user, branch from environment variables (zero server literals in repo)
+// Set DEPLOY_HOST before running: export DEPLOY_HOST=your-server.com
+klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
+    'remote_user' => 'deploy',           // Dedicated non-root user (recommended)
     'branch'      => 'main',             // Git branch deployed from
-    'http_user'   => 'www-data',         // chown target (web server user)
-    'http_group'  => 'www-data',         // chown target (web server group)
+    'http_user'   => 'www-data',         // Web server user
+    'http_group'  => 'www-data',         // Web server group
     'labels'      => ['stage' => 'production'],
     'ssh_options' => [
         'ConnectTimeout'      => 30,
@@ -158,16 +157,17 @@ set('server_config_files', [
 
 task('deploy', [
     // — Preparation —
+    'klytron:deploy:check_pushed',                    // Check for unpushed local commits
     'klytron:deploy:start_timer',                     // Start wall-clock timer
+    'klytron:validate:basic',                         // Validate deploy path, domain, .env, and placeholders
     'deploy:unlock',                                  // Remove stale lock file
-    'klytron:deploy:fix_repo',                        // git safe-dir + permission fixes
     'klytron:laravel:deploy:prepare:complete',        // Confirm + optional backup
 
     // — Code update —
     'deploy:setup',                                   // Create dirs on server first time
     'deploy:lock',                                    // Write deploy.lock
     'deploy:release',                                 // Create timestamped release dir
-    'deploy:update_code',                             // git fetch + checkout
+    'deploy:update_code',                             // git fetch + checkout (fast git mirror cache)
     'deploy:shared',                                  // Symlink shared files/dirs
     'klytron:deploy:fix_git_ownership',               // Fix ownership after clone
 
@@ -175,10 +175,10 @@ task('deploy', [
     'klytron:laravel:deploy:environment:complete',    // Upload .env + optional decrypt
 
     // — Dependencies —
-    'deploy:vendors',                                 // composer install --no-dev
+    'deploy:vendors',                                 // composer install (uses fast vendor cache)
 
     // — Build (skipped when supports_vite = false) —
-    'klytron:laravel:node:vite:build',                // npm install + npm run build
+    'klytron:laravel:node:vite:build',                // Fast npm cache + npm run build
 
     // — Database (skipped when database = 'none') —
     'klytron:laravel:deploy:database:complete',       // Migrations and/or DB import
@@ -186,6 +186,7 @@ task('deploy', [
     // — Optimise —
     'deploy:writable',                                // chmod/chown writable dirs
     'klytron:laravel:deploy:cache:complete',          // cache:clear + config:cache + optimize
+    'klytron:laravel:filament:assets',                // Publish Filament v4/v5 vendor assets (if detected)
 
     // — Go live (atomic symlink switch) —
     'deploy:symlink',                                 // current → new release
@@ -194,7 +195,7 @@ task('deploy', [
     // — Post-deploy enhancements —
     'klytron:assets:map',                             // Map hashed Vite assets for DB compat
     'klytron:assets:cleanup',                         // Remove rogue .htaccess in build/
-    'klytron:sitemap:generate',                       // Generate sitemap.xml
+    'klytron:sitemap:generate',                       // Generate sitemap.xml (if enabled)
     'klytron:sitemap:verify',                         // Check sitemap was written
     'klytron:sitemap:check',                          // HTTP-check sitemap is reachable
     'klytron:fonts:verify',                           // HTTP-check web fonts are accessible
@@ -203,19 +204,12 @@ task('deploy', [
     // — Cleanup & close —
     'deploy:unlock',                                  // Remove deploy.lock
     'deploy:cleanup',                                 // Delete old releases (keep_releases)
-    'klytron:deploy:access_permissions',              // Final ownership/permission sweep
+    'klytron:deploy:access_permissions',              // Scoped permissions on current release
+    'klytron:deploy:health_check',                    // Live HTTP verification
     'klytron:laravel:deploy:notify:complete',         // Success summary + optional notify
     'klytron:deploy:end_timer',                       // Print elapsed time
 ])->desc('Deploy Laravel application to production');
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
-// Hooks run extra tasks at specific points without touching the flow above.
-
-after('klytron:laravel:deploy:success', 'klytron:system:restart'); // Reload PHP-FPM
-after('deploy:shared', 'klytron:server:deploy:configs');           // Copy server config files
-
-// ── Guard ─────────────────────────────────────────────────────────────────────
-
-if (!file_exists('.env.production')) {
-    throw new \RuntimeException('.env.production is required. Create it before deploying.');
-}
+// Note: PHP-FPM reload is already hooked to klytron:laravel:deploy:success by the recipe.
+after('deploy:shared', 'klytron:server:deploy:configs'); // Copy server config files

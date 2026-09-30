@@ -50,8 +50,23 @@ The deployment kit automatically generates paths using the following patterns:
 - **Source**: `klytron_set_domain()`
 - **Example**: `/var/www/${APP_URL_DOMAIN}/public_html` → `/var/www/myapp.com/public_html`
 
+### `${APP_NAME}`
+- **Purpose**: Application name interpolation
+- **Source**: `klytron_configure_app()` or `application` configuration
+- **Example**: `/storage/${APP_NAME}/logs` → `/storage/my-app/logs`
+
+### `${STAGE}`
+- **Purpose**: Deployment stage interpolation (production, staging, demo)
+- **Source**: Host labels `['stage' => '...']` or `stage` option
+- **Example**: `/var/www/${APP_URL_DOMAIN}-${STAGE}` → `/var/www/myapp.com-staging`
+
+### `${PHP_VERSION}`
+- **Purpose**: PHP version string interpolation
+- **Source**: `klytron_set_php_version()`
+- **Example**: `/etc/php/${PHP_VERSION}/fpm/pool.d` → `/etc/php/8.3/fpm/pool.d`
+
 ### `{{application}}`
-- **Purpose**: Application name in paths
+- **Purpose**: Deployer template variable for application name
 - **Source**: `klytron_configure_app()`
 - **Example**: `{{deploy_path_parent}}/{{application}}` → `/home/apps/my-app`
 
@@ -59,6 +74,24 @@ The deployment kit automatically generates paths using the following patterns:
 - **Purpose**: Parent directory for deployments
 - **Source**: `klytron_set_paths()`
 - **Example**: `{{deploy_path_parent}}/{{application}}` → `/home/apps/my-app`
+
+## 🌐 Dynamic Host Configuration via Environment Variables
+
+To prevent hardcoding infrastructure domains, IPs, and usernames into version control, use `klytron_configure_host_from_env()`:
+
+```php
+klytron_configure_host_from_env('DEPLOY_HOST', 'fallback-server.com', [
+    'remote_user' => 'deploy',
+    'branch'      => 'main',
+    'http_user'   => 'www-data',
+    'http_group'  => 'www-data',
+]);
+```
+
+When deploying from CI/CD or local terminals:
+```bash
+DEPLOY_HOST=prod.example.com DEPLOY_BRANCH=main vendor/bin/dep deploy
+```
 
 ## 🎯 Best Practices
 

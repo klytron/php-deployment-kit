@@ -13,14 +13,17 @@
 ## Features
 
 - 🚀 **Multi-Framework** — Laravel, Yii2, API, and simple PHP deployment recipes
-- ⚡ **Zero-Config Defaults** — Smart detection with easy customisation
-- 🔒 **Production Safe** — Multiple confirmation prompts, validation, and rollback
+- ⚡ **Ultra-Fast Deployments** — Hardlink dependency caching for Composer & npm/Vite reduces deploys from 15+ minutes down to 30–60 seconds!
+- 🎨 **Filament v5 Support** — Native publishing and cache-busting for Filament v5 assets
+- 🔒 **Production Safe** — Pre-flight validation, unpushed commit guards, non-destructive git caching, and automated rollback
 - 🔑 **Laravel Env Encryption** — Automatic `LARAVEL_ENV_ENCRYPTION_KEY` decryption before deploy
+- 🌐 **Zero Server Literals** — Configure hosts dynamically from environment variables (`klytron_configure_host_from_env()`)
+- 🧪 **CI Smoke Test Mode** — Test and preview deployment plans in CI without SSH access via `dep klytron:plan`
 - 🗺️ **Asset Mapping** — Maps Vite/Mix assets for database URL compatibility
 - 🖼️ **Image Optimisation** — Compress images post-deploy
 - 🗂️ **Sitemap Generation** — Automatic sitemap creation and verification
 - 🔤 **Font Verification** — Checks webfonts are accessible after deploy
-- 🕒 **Deployment Timing** — Built-in timer and metrics
+- 🕒 **Deployment Timing** — Built-in timer and metrics with completion timestamps
 - 🎛️ **Interactive or Unattended** — Prompted workflow or fully automated via `auto_*` flags
 
 ---
@@ -82,10 +85,13 @@ klytron_configure_project([
     'type'                  => 'laravel',
     'database'              => 'mysql',     // mysql | mariadb | postgresql | sqlite | none
     'supports_vite'         => true,
+    'supports_filament'     => true,        // Publish Filament v5 assets
     'supports_storage_link' => true,
+    'check_git_pushed'      => true,        // Prevent deploying unpushed commits
 ]);
 
-klytron_configure_host('yourdomain.com', [
+// Host credentials read from DEPLOY_HOST env variable with fallback
+klytron_configure_host_from_env('DEPLOY_HOST', 'yourdomain.com', [
     'remote_user' => 'deploy',
     'branch'      => 'main',
     'http_user'   => 'www-data',
@@ -107,36 +113,42 @@ klytron_configure_writable_dirs([
 
 task('deploy', [
     'klytron:deploy:start_timer',
-    'klytron:laravel:deploy:display:info',
-    'klytron:laravel:deploy:configure:interactive',
     'deploy:unlock',
+    'klytron:deploy:check_pushed',
+    'klytron:validate:basic',
     'deploy:setup',
     'deploy:lock',
     'deploy:release',
     'deploy:update_code',
     'deploy:shared',
     'klytron:laravel:deploy:environment:complete',
-    'deploy:env',
     'deploy:vendors',
     'klytron:laravel:node:vite:build',
     'klytron:laravel:deploy:database:complete',
     'deploy:writable',
     'klytron:laravel:deploy:cache:complete',
+    'klytron:laravel:filament:assets',
     'deploy:symlink',
     'klytron:laravel:deploy:finalize:complete',
-    'klytron:assets:map',
-    'klytron:assets:cleanup',
-    'klytron:sitemap:generate',
-    'klytron:fonts:verify',
-    'klytron:images:optimize',
     'deploy:unlock',
     'deploy:cleanup',
+    'klytron:deploy:health_check',
     'klytron:laravel:deploy:notify:complete',
     'klytron:deploy:end_timer',
 ])->desc('Deploy Laravel application');
 ```
 
-### 2. Deploy
+### 2. Preview or Dry-Run Plan (CI/CD)
+
+```bash
+# Smoke test plan without SSH credentials:
+vendor/bin/dep klytron:plan
+
+# View Deployer task sequence:
+vendor/bin/dep deploy --plan
+```
+
+### 3. Deploy
 
 ```bash
 vendor/bin/dep deploy

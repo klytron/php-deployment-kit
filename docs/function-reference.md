@@ -134,7 +134,20 @@ Configure host with project-specific settings.
 
 ```php
 klytron_configure_host('your-server.com', [
-    'remote_user' => 'root',
+    'remote_user' => 'deploy',
+    'branch' => 'main',
+    'http_user' => 'www-data',
+    'http_group' => 'www-data',
+    'labels' => ['stage' => 'production'],
+]);
+```
+
+#### `klytron_configure_host_from_env(string $envVar = 'DEPLOY_HOST', string $defaultHost = 'localhost', array $config = [])`
+Configure host dynamically from environment variables, avoiding hardcoded server credentials in your code repository.
+
+```php
+klytron_configure_host_from_env('DEPLOY_HOST', 'fallback-server.com', [
+    'remote_user' => 'deploy',
     'branch' => 'main',
     'http_user' => 'www-data',
     'http_group' => 'www-data',
@@ -147,12 +160,12 @@ Alternative host configuration function.
 
 ```php
 klytron_host('your-server.com', [
-    'remote_user' => 'root',
+    'remote_user' => 'deploy',
     'branch' => 'main',
 ]);
 ```
 
-### Environment Configuration
+### Environment & Dynamic Path Configuration
 
 #### `klytron_set_php_version(string $version)`
 Set the PHP version for deployment.
@@ -166,6 +179,20 @@ Set the application domain.
 
 ```php
 klytron_set_domain('your-domain.com');
+```
+
+#### `klytron_resolve_placeholders(string $path): string`
+Interpolates `${APP_URL_DOMAIN}`, `${APP_NAME}`, `${STAGE}`, and `${PHP_VERSION}` placeholders within path strings.
+
+```php
+$resolved = klytron_resolve_placeholders('/var/www/${APP_URL_DOMAIN}/public_html');
+```
+
+#### `klytron_get_resolved_path(string $key): string`
+Returns the resolved path for a given Deployer configuration key after replacing all placeholders.
+
+```php
+$publicHtml = klytron_get_resolved_path('public_html');
 ```
 
 ### Database Configuration

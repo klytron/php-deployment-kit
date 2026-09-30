@@ -178,6 +178,7 @@ klytron_configure_project(array $config);
 'supports_passport' => false,           // Laravel Passport support
 'supports_nodejs' => false,             // Node.js build support (generic)
 'supports_vite' => false,               // Vite asset compilation
+'supports_filament' => false,           // Filament v5 asset publishing (artisan filament:assets)
 'supports_mix' => false,                // Laravel Mix support
 'supports_storage_link' => true,        // Storage symlink support
 'supports_sitemap' => false,            // Sitemap generation
@@ -185,6 +186,11 @@ klytron_configure_project(array $config);
 'supports_schedule' => false,           // Task scheduler support
 'supports_horizon' => false,            // Laravel Horizon support
 'supports_telescope' => false,          // Laravel Telescope support
+```
+
+#### Git & Safety Options
+```php
+'check_git_pushed' => true,             // Abort if local branch has unpushed commits
 ```
 
 #### API-Specific Options
@@ -320,19 +326,55 @@ klytron_configure_host(
 **Complete Example:**
 ```php
 klytron_configure_host('myapp.com', [
-    'remote_user' => 'root',
+    'remote_user' => 'deploy',
     'port' => 22,
     'identity_file' => '~/.ssh/id_rsa',
     'branch' => 'main',
     'http_user' => 'www-data',
     'http_group' => 'www-data',
-    'deploy_path' => '/var/www/html',
     'labels' => [
         'stage' => 'production',
         'env' => 'prod',
     ],
     'roles' => ['app', 'web'],
 ]);
+```
+
+### `klytron_configure_host_from_env()`
+
+Configure host settings dynamically from environment variables, eliminating hardcoded server hostnames, credentials, and branches from your codebase.
+
+```php
+klytron_configure_host_from_env(
+    string $envVar = 'DEPLOY_HOST',       // Environment variable name for the host
+    string $defaultHost = 'localhost',     // Fallback hostname if environment variable is unset
+    array $config = []                     // Default host configuration overrides
+);
+```
+
+**Environment Variables Supported:**
+- `DEPLOY_HOST` (or custom name passed in `$envVar`): Server hostname
+- `DEPLOY_USER`: Remote SSH user (overrides `$config['remote_user']`)
+- `DEPLOY_BRANCH`: Git branch to deploy (overrides `$config['branch']`)
+- `DEPLOY_HTTP_USER`: Web server owner (overrides `$config['http_user']`)
+- `DEPLOY_HTTP_GROUP`: Web server group (overrides `$config['http_group']`)
+- `DEPLOY_PORT`: SSH port (overrides `$config['port']`)
+
+**Example:**
+```php
+// In deploy.php:
+klytron_configure_host_from_env('DEPLOY_HOST', 'fallback-server.com', [
+    'remote_user' => 'deploy',
+    'branch'      => 'main',
+    'http_user'   => 'www-data',
+    'http_group'  => 'www-data',
+    'labels'      => ['stage' => 'production'],
+]);
+
+// Run via terminal:
+// export DEPLOY_HOST=production.example.com
+// export DEPLOY_BRANCH=release-v1.1
+// vendor/bin/dep deploy
 ```
 
 ## 🎯 Shared Files and Directories

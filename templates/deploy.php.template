@@ -50,9 +50,10 @@ klytron_set_domain('your-domain.com');  // Resolves ${APP_URL_DOMAIN} in paths a
 klytron_set_php_version('php8.3');      // PHP binary used for php commands
 
 // ── Host ──────────────────────────────────────────────────────────────────────
-
-klytron_configure_host('your-server.com', [
-    'remote_user' => 'deploy',   // SSH user
+// Recommended: read host, user, branch from environment variables (zero server literals in repo)
+// Set DEPLOY_HOST before running: export DEPLOY_HOST=your-server.com
+klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
+    'remote_user' => 'deploy',   // Dedicated non-root deploy user (recommended)
     'branch'      => 'main',     // Git branch to deploy
     'http_user'   => 'www-data', // Web server user (for permissions)
     'http_group'  => 'www-data', // Web server group
@@ -123,22 +124,24 @@ klytron_configure_writable_dirs([
 // Customise task order here. All task logic lives in the package.
 
 task('deploy', [
-    'klytron:deploy:start_timer',
-    'deploy:unlock',
-    'klytron:deploy:fix_repo',
-    'deploy:setup',
-    'deploy:lock',
-    'deploy:release',
-    'deploy:update_code',
-    'deploy:shared',
+    'klytron:deploy:check_pushed',     // Check for unpushed local commits
+    'klytron:deploy:start_timer',      // Start deployment timer
+    'klytron:validate:basic',          // Validate paths, domain, .env, and placeholders
+    'deploy:unlock',                   // Clear any stale deploy lock
+    'deploy:setup',                    // Create directory structure on server
+    'deploy:lock',                     // Write deploy.lock
+    'deploy:release',                  // Create new release directory
+    'deploy:update_code',              // Git fetch/checkout on server (uses fast git cache)
+    'deploy:shared',                   // Symlink shared files and dirs
     'klytron:upload:env:production',   // Upload .env
-    'deploy:vendors',                  // composer install
-    'deploy:writable',
-    'deploy:symlink',
-    'klytron:deploy:access_permissions',
-    'deploy:unlock',
-    'deploy:cleanup',
-    'klytron:deploy:end_timer',
+    'deploy:vendors',                  // composer install (uses fast vendor cache)
+    'deploy:writable',                 // Set directory permissions
+    'deploy:symlink',                  // Atomically switch current → new release
+    'klytron:deploy:access_permissions', // Scoped ownership/permission setup
+    'klytron:deploy:health_check',     // Live HTTP verification
+    'deploy:unlock',                   // Remove deploy.lock
+    'deploy:cleanup',                  // Delete old releases (keep_releases)
+    'klytron:deploy:end_timer',        // Print elapsed time
 ])->desc('Deploy project to production');
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────

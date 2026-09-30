@@ -782,14 +782,117 @@ task('deploy', [
 
 **Output:**
 ```
-⏱️ Deployment completed at 2026-03-31 13:33:05
-⏱️ Deployment completed in 10m 0s
+⏱️ Deployment completed at 2026-09-30 15:30:00
+⏱️ Deployment completed in 42s
 ```
 
 **What it does:**
 - Calculates deployment duration
 - Displays the completion timestamp
-- Shows the total time taken
+- Shows the total elapsed time
+
+### `klytron:deploy:check_pushed`
+
+Pre-flight safety task that verifies all local Git commits have been pushed to the upstream remote before Deployer connects.
+
+**Usage:**
+```php
+task('deploy', [
+    'klytron:deploy:start_timer',
+    'deploy:unlock',
+    'klytron:deploy:check_pushed',
+    // ...
+]);
+```
+
+**What it does:**
+- Runs `git log @{u}.. --oneline` locally.
+- Throws an immediate `RuntimeException` if unpushed commits exist, preventing deployments of stale code.
+- Automatically bypassed if `check_git_pushed` is configured to `false` or if running in detached HEAD.
+
+### `klytron:cache:vendor`
+
+High-speed Composer optimization task. Reuses the `vendor/` directory from the previous release via hardlinks (`cp -al`).
+
+**Usage:**
+- Runs automatically before `deploy:vendors` when `previous_release` exists.
+- Reduces `composer install` from minutes down to ~2 seconds because unchanged packages are already hardlinked in place.
+
+### `klytron:laravel:node:vite:build`
+
+Builds frontend assets with Vite using `node_modules` caching and `package-lock.json` change detection.
+
+**What it does:**
+- Copies `node_modules/` from previous release via hardlinks (`cp -al`).
+- Compares `package-lock.json` against the previous release.
+- If dependencies are identical, skips `npm install` and runs `npm run build` directly (cuts 3–6 minutes off builds).
+- Injects environment variables (`APP_URL`, `APP_ENV`, etc.) into Vite build process.
+
+### `klytron:laravel:filament:assets`
+
+Publishes Filament v5 panel vendor assets into `public/`.
+
+**Usage:**
+- Runs automatically before `deploy:symlink` when `supports_filament` is enabled or `filament/filament` is detected in `composer.json`.
+- Executes `php artisan filament:assets` to ensure all stylesheets and scripts are published and cache-busted for the new release.
+
+### `klytron:deploy:health_check`
+
+Automated HTTP verification task that ensures the application is live and returning HTTP 200 post-symlink.
+
+**Usage:**
+```php
+task('deploy', [
+    // ...
+    'deploy:symlink',
+    'deploy:unlock',
+    'deploy:cleanup',
+    'klytron:deploy:health_check',
+    'klytron:deploy:end_timer',
+]);
+```
+
+**What it does:**
+- Performs HTTP request using `curl` against the deployed `application_public_url` or domain.
+- Confirms HTTP 200 (or configured expected status) and logs response status and latency.
+
+### `klytron:plan`
+
+CI smoke test and dry-run task. Validates local configuration, environment files, and path placeholders without requiring SSH keys or remote network access.
+
+**Usage:**
+```bash
+vendor/bin/dep klytron:plan
+```
+
+**Output:**
+```
+📋 ===== KLYTRON DEPLOYMENT PLAN & VALIDATION =====
+Application:  my-app
+Repository:   git@github.com:org/my-app.git
+Deploy Path:  /var/www/my-app
+Domain:       myapp.com
+Database:     mysql
+Vite:         enabled
+Filament:     enabled
+✅ Local environment file verified: .env.production
+✅ All path placeholders resolved
+✅ Deploying as non-root user: deploy
+✅ All plan configurations validated successfully!
+```
+
+### `klytron:validate:basic`
+
+Composite validation task that executes `klytron:validate:deploy_path_parent`, `klytron:validate:domain`, `klytron:validate:env_files`, `klytron:validate:placeholders`, and `klytron:validate:remote_user`.
+
+### `klytron:fpm:reload`
+
+Gracefully reloads the PHP-FPM service (e.g. `systemctl reload php8.3-fpm`), clearing opcache without dropping active connections.
+
+### `klytron:deploy:clean_repo`
+
+Explicit task to completely wipe Deployer's remote `.dep/repo` cache when a corrupt git object occurs on the server.
+
 
 ## 🎯 Task Configuration
 

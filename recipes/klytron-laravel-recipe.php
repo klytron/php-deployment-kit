@@ -19,6 +19,10 @@ if (file_exists('vendor/deployer/deployer/recipe/laravel.php')) {
     throw new \RuntimeException('Laravel recipe not found. Please ensure Deployer is properly installed.');
 }
 
+// Override Deployer provision's interactive ask() closure
+set('php_version', '8.3');
+set('klytron_php_version', 'php8.3');
+
 // Load core framework-agnostic tasks
 require_once __DIR__ . '/../klytron-tasks.php';
 
@@ -575,17 +579,6 @@ task('klytron:laravel:local:env:ensure_decrypted', function () {
     }
 })->desc('Ensure plaintext env files exist locally by decrypting from encrypted versions before deployment');
 
-/**
- * Conditional Node.js asset building
- */
-task('klytron:laravel:node:vite:build', function () {
-    if (get('shouldBuildAssets', false)) {
-        info("⚡ Building frontend assets with Vite...");
-        invoke('klytron:laravel:node:vite:build:local');
-    } else {
-        info("⏭️  Skipping frontend asset build (not enabled)");
-    }
-})->desc('Conditionally build frontend assets based on configuration');
 
 /**
  * Deployment confirmation task
@@ -710,25 +703,42 @@ task('klytron:laravel:node:vite:build', function () {
     }
 
     info('🔍 Node.js version: ' . run($nodeEnvPrefix . $nodeBinary . ' --version'));
-    info("📦 Installing Node.js dependencies...");
-    // Resilient npm configuration: retries, cache, and registry fallback
-    $npmCacheDir = get('npm_cache_dir', '{{deploy_path}}/.npm-cache');
-    run("mkdir -p '$npmCacheDir'");
-    $npmBaseEnv = 'PUPPETEER_SKIP_DOWNLOAD=1 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1 '
-        . 'NPM_CONFIG_AUDIT=false NPM_CONFIG_FUND=false '
-        . 'NPM_CONFIG_FETCH_RETRIES=5 NPM_CONFIG_FETCH_RETRY_FACTOR=2 '
-        . 'NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 '
-        . 'NPM_CONFIG_TIMEOUT=600000 NPM_CONFIG_PREFER_OFFLINE=true '
-        . "NPM_CONFIG_CACHE='$npmCacheDir'";
-    $primaryRegistry = get('npm_registry', 'https://registry.npmjs.org');
-    $mirrorRegistry  = get('npm_registry_mirror', 'https://registry.npmmirror.com');
-    $useCi = test("[ -f '{{release_path}}/package-lock.json' ]");
-    $installCmd = $nodeEnvPrefix . ($useCi ? 'npm ci' : 'npm install');
-    try {
-        run("$npmBaseEnv NPM_CONFIG_REGISTRY='$primaryRegistry' $installCmd");
-    } catch (\Exception $e) {
-        warning('⚠️ npm install failed with primary registry, retrying with mirror...');
-        run("$npmBaseEnv NPM_CONFIG_REGISTRY='$mirrorRegistry' $installCmd");
+
+    // Fast cache: Reuse node_modules from previous release if available
+    if (test("[ -d '{{deploy_path}}/current/node_modules' ]") && !test("[ -d '{{release_path}}/node_modules' ]")) {
+        info("⚡ Reusing node_modules from previous release for fast caching...");
+        run("cp -al '{{deploy_path}}/current/node_modules' '{{release_path}}/node_modules' 2>/dev/null || cp -R '{{deploy_path}}/current/node_modules' '{{release_path}}/node_modules'");
+    }
+
+    // Check if package-lock.json changed between releases
+    $lockUnchanged = false;
+    if (test("[ -f '{{deploy_path}}/current/package-lock.json' ]") && test("[ -f '{{release_path}}/package-lock.json' ]")) {
+        $lockUnchanged = test("cmp -s '{{deploy_path}}/current/package-lock.json' '{{release_path}}/package-lock.json'");
+    }
+
+    if ($lockUnchanged && test("[ -d '{{release_path}}/node_modules' ]")) {
+        info("⚡ Node dependencies unchanged (package-lock.json matches previous release). Skipping npm install!");
+    } else {
+        info("📦 Installing Node.js dependencies...");
+        // Resilient npm configuration: retries, cache, and registry fallback
+        $npmCacheDir = get('npm_cache_dir', '{{deploy_path}}/.npm-cache');
+        run("mkdir -p '$npmCacheDir'");
+        $npmBaseEnv = 'PUPPETEER_SKIP_DOWNLOAD=1 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1 '
+            . 'NPM_CONFIG_AUDIT=false NPM_CONFIG_FUND=false '
+            . 'NPM_CONFIG_FETCH_RETRIES=5 NPM_CONFIG_FETCH_RETRY_FACTOR=2 '
+            . 'NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 '
+            . 'NPM_CONFIG_TIMEOUT=600000 NPM_CONFIG_PREFER_OFFLINE=true '
+            . "NPM_CONFIG_CACHE='$npmCacheDir'";
+        $primaryRegistry = get('npm_registry', 'https://registry.npmjs.org');
+        $mirrorRegistry  = get('npm_registry_mirror', 'https://registry.npmmirror.com');
+        $useCi = test("[ -f '{{release_path}}/package-lock.json' ]");
+        $installCmd = $nodeEnvPrefix . ($useCi ? 'npm ci' : 'npm install');
+        try {
+            run("$npmBaseEnv NPM_CONFIG_REGISTRY='$primaryRegistry' $installCmd");
+        } catch (\Exception $e) {
+            warning('⚠️ npm install failed with primary registry, retrying with mirror...');
+            run("$npmBaseEnv NPM_CONFIG_REGISTRY='$mirrorRegistry' $installCmd");
+        }
     }
 
     info("🏗️ Building production assets with Vite...");
@@ -752,7 +762,7 @@ task('klytron:laravel:node:vite:build', function () {
     $envString = implode(' ', $envVars);
     run("$envString " . $nodeEnvPrefix . " npm run build");
     info("✅ Vite production build complete");
-})->desc('Vite build with precise environment variables');
+})->desc('Vite build with fast caching and precise environment variables');
 
 task('klytron:laravel:node:vite:build:local', function () {
     info("🏗️ Building frontend assets locally...");
@@ -763,6 +773,29 @@ task('klytron:laravel:node:vite:build:local', function () {
     upload('public/build/', '{{release_path}}/public/build/');
     info("✅ Built assets uploaded");
 })->desc('Build Vite assets locally and upload');
+
+/**
+ * Publish Filament v4/v5 vendor assets into public/
+ */
+task('klytron:laravel:filament:assets', function () {
+    $supportsFilament = get('supports_filament', null);
+    if ($supportsFilament === false) {
+        info("⏭️ Filament asset publishing disabled for this project");
+        return;
+    }
+
+    if ($supportsFilament === null) {
+        // Auto-detect Filament in composer.lock
+        $hasFilament = test("[ -f '{{release_path}}/composer.lock' ] && grep -q 'filament/' '{{release_path}}/composer.lock'");
+        if (!$hasFilament) {
+            return;
+        }
+    }
+
+    info("🎨 Publishing Filament admin panel assets...");
+    run('{{bin/php}} {{release_path}}/artisan filament:assets');
+    info("✅ Filament assets published successfully");
+})->desc('Publish Filament v4/v5 vendor assets');
 
 ///////////////////////////////////////////////////////////////////////////////
 // LARAVEL NODE.JS BUILD TASKS
@@ -1007,10 +1040,28 @@ task('klytron:laravel:deploy:db:import', function () {
     // Detect database type from project configuration
     $databaseType = get('database_type', 'mysql'); // Default to mysql if not specified
     
-    // For SQLite projects, database import is not applicable
+    // For SQLite projects, check if a dump/seed SQLite database file exists to replace shared database
     if ($databaseType === 'sqlite') {
-        info("🗄️  SQLite database detected - skipping database import (not applicable for SQLite)");
-        info("💡 SQLite databases are file-based and don't require external imports");
+        $dbImportPath = get('db_import_path', 'database/live-db-exports');
+        $sqliteCandidate = run("find {{release_path}}/{$dbImportPath} -type f \\( -name '*.sqlite' -o -name '*.db' \\) 2>/dev/null | head -n 1 || true");
+        $sqliteCandidate = trim($sqliteCandidate);
+
+        if (!empty($sqliteCandidate)) {
+            info("🗄️  Found SQLite database file to import: {$sqliteCandidate}");
+            $targetDb = get('sqlite_database_path', '{{deploy_path}}/shared/database/database.sqlite');
+            $targetDir = dirname($targetDb);
+            run("mkdir -p '{$targetDir}'");
+            run("cp -f '{$sqliteCandidate}' '{$targetDb}'");
+            $httpUser = get('http_user', 'www-data');
+            $httpGroup = get('http_group', 'www-data');
+            run("sudo chown {$httpUser}:{$httpGroup} '{$targetDb}' 2>/dev/null || true");
+            run("sudo chmod 664 '{$targetDb}' 2>/dev/null || true");
+            info("✅ SQLite database replaced at {$targetDb}");
+            run('cd {{release_path}} && {{bin/php}} artisan cache:clear');
+            return;
+        }
+
+        info("🗄️  SQLite database detected - no .sqlite/.db import file found in {$dbImportPath}, using existing shared database");
         return;
     }
 
@@ -1461,6 +1512,11 @@ task('klytron:laravel:validate:all', [
  * Group task for database operations (when needed)
  */
 task('klytron:laravel:deploy:database:complete', function () {
+    $dbType = get('database_type', get('database', 'mysql'));
+    if ($dbType === 'none') {
+        info("⏭️ Database operations skipped (database is 'none')");
+        return;
+    }
     if (get('shouldRunMigration', false)) {
         invoke('klytron:laravel:deploy:db:migrate');
     }

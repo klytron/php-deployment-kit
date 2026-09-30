@@ -102,85 +102,71 @@ task('klytron:validate:deploy_path_parent', function () {
 /**
  * Fix repository cache issues and permissions
  */
-task('klytron:deploy:fix_repo', function () {
-    info("🔧 Fixing repository cache and permission issues...");
-
-    $repoPath = get('deploy_path') . '/.dep/repo';
-    $deployPath = get('deploy_path');
-
-    info("📁 Repository cache path: $repoPath");
-
-    // Check if the repo directory exists and remove if corrupted
-    if (test("[ -d '$repoPath' ]")) {
-        info("🗑️ Removing corrupted repository cache...");
-        run("rm -rf '$repoPath'");
-        info("✅ Repository cache removed successfully");
-    } else {
-        info("ℹ️ Repository cache directory does not exist");
+/**
+ * Check if local git branch has unpushed commits
+ * Prevents deploying stale code from the remote repository
+ */
+task('klytron:deploy:check_pushed', function () {
+    if (!get('check_git_pushed', true)) {
+        info("⏭️  Skipping unpushed commits check (check_git_pushed = false)");
+        return;
     }
 
-    // Check for git lock files that might be causing issues
-    if (test("[ -f '$deployPath/.git/index.lock' ]")) {
-        info("🔓 Removing git lock file...");
-        run("rm -f '$deployPath/.git/index.lock'");
-        info("✅ Git lock file removed");
-    }
-
-    // Pre-emptively add the repository cache directory to Git safe directories
-    // This prevents "dubious ownership" errors when the repo is cloned
-    info("🔒 Pre-configuring Git safe directory for repository cache...");
-    run("git config --global --add safe.directory '$repoPath' || true");
-    
-    // Also add the deploy path as a safe directory in case there's a .git directory there
-    run("git config --global --add safe.directory '$deployPath' || true");
-    
-    // Add common Git directories that might cause ownership issues
-    // Use environment variables or configuration instead of hardcoded paths
-    $commonGitDirs = [];
-    
-    // Add deploy_path_parent if configured
-    if (has('deploy_path_parent')) {
-        $commonGitDirs[] = get('deploy_path_parent');
-    }
-    
-    // Add deploy_path if different from deploy_path_parent
-    if (has('deploy_path') && (!has('deploy_path_parent') || get('deploy_path') !== get('deploy_path_parent'))) {
-        $commonGitDirs[] = get('deploy_path');
-    }
-    
-    // Add common web server directories
-    $commonGitDirs = array_merge($commonGitDirs, [
-        '/var/www',
-        '/var/www/html',
-        '~/*/public_html',
-        '~/*/domains/*/public_html',
-        '{{deploy_path}}/public_html',
-        '{{deploy_path}}/current/public',
-        get('deploy_path') . '/*/public_html',
-        get('deploy_path') . '/*/current/public'
-    ]);
-    
-    foreach ($commonGitDirs as $gitDir) {
-        if (test("[ -d '$gitDir' ]")) {
-            run("git config --global --add safe.directory '$gitDir' || true");
-            info("✅ Added safe directory: $gitDir");
+    try {
+        $unpushed = runLocally('git log @{u}.. --oneline 2>/dev/null || true');
+        if (!empty(trim($unpushed))) {
+            error("❌ CRITICAL ERROR: You have unpushed commits!");
+            info("The deployment pulls from the remote repository. You MUST push your changes first.");
+            info("Unpushed commits:\n" . trim($unpushed));
+            throw new \RuntimeException("Deployment aborted: Unpushed commits detected. Push to remote before deploying.");
         }
+        info("✅ Git repository is up to date with remote tracking branch");
+    } catch (\Deployer\Exception\RunException $e) {
+        warning("⚠️ Could not check git upstream status (detached HEAD or no upstream tracking branch). Proceeding.");
+    }
+})->desc('Check if all local commits are pushed to remote');
+
+/**
+ * Fix repository locks and permissions without deleting the cached clone
+ */
+task('klytron:deploy:fix_repo', function () {
+    info("🔧 Checking git locks and safe directory configuration...");
+
+    $deployPath = get('deploy_path');
+    $repoPath = $deployPath . '/.dep/repo';
+
+    // Remove stale lock files only
+    if (test("[ -f '$deployPath/.git/index.lock' ]")) {
+        run("rm -f '$deployPath/.git/index.lock'");
+        info("🔓 Removed stale git index.lock");
+    }
+    if (test("[ -f '$repoPath/index.lock' ]")) {
+        run("rm -f '$repoPath/index.lock'");
+        info("🔓 Removed stale repo cache index.lock");
     }
 
-    // If the repo directory exists, fix its permissions
+    // Configure safe directories to prevent 'dubious ownership' errors
+    run("git config --global --add safe.directory '$deployPath' || true");
+    run("git config --global --add safe.directory '$repoPath' || true");
+
+    if (has('deploy_path_parent')) {
+        $parent = get('deploy_path_parent');
+        run("git config --global --add safe.directory '$parent' || true");
+    }
+})->desc('Clear git lock files and configure safe directory without deleting repo cache');
+
+/**
+ * Force remove cached git clone to trigger a full re-clone on next deploy
+ */
+task('klytron:deploy:clean_repo', function () {
+    $repoPath = get('deploy_path') . '/.dep/repo';
     if (test("[ -d '$repoPath' ]")) {
-        info("🔧 Fixing repository permissions...");
-        // Use the repository cache path for git commands.
-        run("cd '$repoPath' && git config --global --add safe.directory '$repoPath' || true");
-        run("cd '$repoPath' && git status || true");
-        info("✅ Repository permissions fixed");
+        run("rm -rf '$repoPath'");
+        info("🗑️ Cleared git repository cache at $repoPath");
     } else {
-        info("ℹ️ Repository cache path not yet created, will be handled during code update");
+        info("ℹ️ Repository cache does not exist");
     }
-
-    info("🎉 Repository fix completed. You can now re-run your deployment.");
-    info("💡 Run: vendor/bin/dep deploy");
-})->desc('Fix repository cache issues and permissions when deploy:update_code fails');
+})->desc('Force delete git mirror cache to trigger a clean clone');
 
 /**
  * Fix Git ownership issues after code update
@@ -506,31 +492,44 @@ task('klytron:deploy:info', function () {
 // SYSTEM TASKS
 ///////////////////////////////////////////////////////////////////////////////
 
+/**
+ * Reload PHP-FPM service (graceful reload to clear OPcache)
+ */
+task('klytron:fpm:reload', function () {
+    $phpVersion = get('php_version', '8.4');
+    info("🔄 Reloading PHP-FPM (php{$phpVersion}-fpm)...");
+    try {
+        run("sudo systemctl reload php{$phpVersion}-fpm 2>/dev/null || sudo systemctl reload php-fpm 2>/dev/null || sudo service php{$phpVersion}-fpm reload 2>/dev/null || true");
+        info("✅ PHP-FPM reloaded successfully");
+    } catch (\Throwable $e) {
+        warning("⚠️ Could not reload PHP-FPM service: " . $e->getMessage());
+    }
+})->desc('Reload PHP-FPM to refresh OPcache after deployment');
+
 task('klytron:system:restart', function () {
-    //https://www.cyberciti.biz/faq/howto-reboot-linux/
-    //https://opensource.com/article/19/7/reboot-linux
-    //https://laracasts.com/discuss/channels/laravel/deployer
-    //https://linuxize.com/post/reboot-linux-using-command-line/
-    //https://www.geeksforgeeks.org/reboot-command-in-linux-with-examples/
+    static $alreadyExecuted = false;
+    if ($alreadyExecuted) {
+        info("⏭️ System restart/reload already executed in this deployment, skipping duplicate call");
+        return;
+    }
+    $alreadyExecuted = true;
 
-    //Reboot Immediately
-    //run('sudo reboot');
-
-    //waits 1 minute before rebooting
-    run('sudo shutdown -r');
-
-    //this is to allow deploy to complete and return success response instead of
-    //failed response due to immediate rebooting.
-})->desc('Restart the system after deployment');
+    if (get('system_reboot_on_deploy', false)) {
+        info("🔄 Rebooting server (system_reboot_on_deploy is enabled)...");
+        run('sudo shutdown -r +1 "Deployment complete, rebooting in 1 minute" 2>/dev/null || sudo reboot');
+    } else {
+        invoke('klytron:fpm:reload');
+    }
+})->desc('Reload PHP-FPM or restart system after deployment (idempotent)');
 
 
 task('klytron:deploy:access_permissions', function () {
-    info("🔐 Setting file permissions and ownership...");
+    info("🔐 Setting file permissions and ownership on current release...");
 
     // Get user and group from configuration
-    $httpUser = get('http_user');
-    $httpGroup = get('http_group');
-    $webServerUser = 'www-data'; // Default web server user
+    $httpUser = get('http_user', 'www-data');
+    $httpGroup = get('http_group', 'www-data');
+    $webServerUser = 'www-data';
     
     // Get default permissions from configuration
     $filePerms = get('default_file_permissions', 0644);
@@ -541,81 +540,52 @@ task('klytron:deploy:access_permissions', function () {
     // Add web server user to the http_group if different
     if ($httpGroup !== 'www-data' && $httpGroup !== $webServerUser) {
         run("sudo usermod -a -G $httpGroup $webServerUser 2>/dev/null || true");
-        info("✅ Added web server user '$webServerUser' to group '$httpGroup'");
     }
 
-    // Set ownership for the entire deployment
-    run("sudo chown -R $httpUser:$httpGroup {{deploy_path}}");
-    info("✅ Set ownership for deployment directory to $httpUser:$httpGroup");
+    // Set ownership only on release path (fast, avoids crawling all historical releases and backup tarballs)
+    run("sudo chown -R $httpUser:$httpGroup {{release_or_current_path}}");
+
+    // Ensure shared storage and cache directories are owned by web user
+    $sharedPath = get('deploy_path') . '/shared';
+    if (test("[ -d '$sharedPath/storage' ]")) {
+        run("sudo chown -R $httpUser:$httpGroup '$sharedPath/storage' 2>/dev/null || true");
+    }
+    if (test("[ -d '$sharedPath/bootstrap/cache' ]")) {
+        run("sudo chown -R $httpUser:$httpGroup '$sharedPath/bootstrap/cache' 2>/dev/null || true");
+    }
 
     // Set ownership for public HTML if configured
     $publicHtml = get('application_public_html');
-    if (!empty($publicHtml)) {
-        run("sudo chown -R $httpUser:$httpGroup $publicHtml");
-        info("✅ Set ownership for public HTML directory to $httpUser:$httpGroup");
+    if (!empty($publicHtml) && test("[ -d '$publicHtml' ]")) {
+        run("sudo chown -R $httpUser:$httpGroup '$publicHtml'");
     }
 
-    // First, handle the .htaccess file in the public directory (follow symlinks)
-    $htaccessPath = '{{deploy_path}}/current/public/.htaccess';
-    
-    // Check if .htaccess exists and is a symlink
-    if (test("[ -L $htaccessPath ]")) {
-        // Handle symlink - get the real path and set permissions on the target
-        $realPath = run("readlink -f $htaccessPath");
-        if (!empty($realPath)) {
-            run("sudo chmod $filePermsOct $realPath");
-            run("sudo chown $httpUser:$httpGroup $realPath");
-            info("✅ Set correct permissions for .htaccess symlink target at $realPath");
-        }
-    } 
-    
-    // Also handle any other .htaccess files in the project
-    run('find {{deploy_path}}/current -name ".htaccess" -type f -exec sudo chmod ' . $filePermsOct . ' {} +');
-    run('find {{deploy_path}}/current -name ".htaccess" -type f -exec sudo chown $httpUser:$httpGroup {} +');
-    
-    // Handle the public directory if it's a symlink
-    if (test("[ -L {{deploy_path}}/current/public ]")) {
-        $publicRealPath = run("readlink -f {{deploy_path}}/current/public");
-        if (!empty($publicRealPath)) {
-            run("sudo chmod -R $dirPermsOct $publicRealPath");
-            run("sudo find $publicRealPath -type f -name '.htaccess' -exec sudo chmod $filePermsOct {} +");
-            info("✅ Set correct permissions for files in symlinked public directory");
-        }
-    }
-    
-    // Handle the public_html .htaccess file using configured path
-    $publicHtml = get('application_public_html', '');
-    if (!empty($publicHtml)) {
-        $publicHtaccess = rtrim($publicHtml, '/') . '/.htaccess';
-        if (test("[ -f $publicHtaccess ]")) {
-            run("sudo chmod $filePermsOct $publicHtaccess");
-            run("sudo chown $httpUser:$httpGroup $publicHtaccess");
-            info("✅ Set correct permissions for $publicHtaccess");
-        } else {
-            info("ℹ️ .htaccess not found at $publicHtaccess");
-        }
+    // Batch chmod for directories with setgid bit using {} + (batches hundreds of files per sudo call instead of slow individual forks)
+    run('find {{release_or_current_path}} -type d -exec sudo chmod g+s,' . $dirPermsOct . ' {} +');
+    run('find {{release_or_current_path}} -type f -exec sudo chmod ' . $filePermsOct . ' {} +');
+
+    // Handle .htaccess if present in public directory
+    $htaccessPath = '{{release_or_current_path}}/public/.htaccess';
+    if (test("[ -f '$htaccessPath' ]")) {
+        run("sudo chmod $filePermsOct '$htaccessPath'");
+        run("sudo chown $httpUser:$httpGroup '$htaccessPath'");
     }
 
-    // Set the setgid bit on directories to ensure new files inherit the group
-    run('find {{deploy_path}}/current -type d -exec sudo chmod g+s {} \\;');
-    info("✅ Set setgid bit on directories for proper group inheritance");
-
-    // Ensure the web server can access the directories with configured permissions
-    run('find {{deploy_path}}/current -type d -exec sudo chmod ' . $dirPermsOct . ' {} +');
-    run('find {{deploy_path}}/current -type f -exec sudo chmod ' . $filePermsOct . ' {} +');
-    
     // Special handling for storage and bootstrap/cache in Laravel
     if (has('laravel')) {
         $storagePerms = get('laravel_storage_permissions', 0775);
         $cachePerms = get('laravel_cache_permissions', 0775);
         
-        run('chmod -R ' . $storagePerms . ' {{deploy_path}}/current/storage');
-        run('chmod -R ' . $cachePerms . ' {{deploy_path}}/current/bootstrap/cache');
-        info("✅ Set special permissions for Laravel storage and cache directories");
+        if (test("[ -d '{{release_or_current_path}}/storage' ]")) {
+            run('chmod -R ' . $storagePerms . ' {{release_or_current_path}}/storage 2>/dev/null || true');
+        }
+        if (test("[ -d '{{release_or_current_path}}/bootstrap/cache' ]")) {
+            run('chmod -R ' . $cachePerms . ' {{release_or_current_path}}/bootstrap/cache 2>/dev/null || true');
+        }
     }
 
     info("✅ File permissions and ownership set successfully");
-})->desc('Set proper file permissions and ownership');
+});
 
 
 task('klytron:deploy:create:server_symlink', function () {
@@ -961,16 +931,123 @@ task('klytron:deploy:success', function () {
     info("==================================");
 })->desc('Display deployment success message');
 
+/**
+ * Fast vendor caching: reuse vendor from previous release to accelerate composer install
+ */
+task('klytron:cache:vendor', function () {
+    if (test("[ -d '{{deploy_path}}/current/vendor' ]") && !test("[ -d '{{release_path}}/vendor' ]")) {
+        info("⚡ Reusing vendor from previous release for fast caching...");
+        run("cp -al '{{deploy_path}}/current/vendor' '{{release_path}}/vendor' 2>/dev/null || cp -R '{{deploy_path}}/current/vendor' '{{release_path}}/vendor'");
+    }
+})->desc('Copy vendor from previous release to accelerate composer install');
+
+before('deploy:vendors', 'klytron:cache:vendor');
+
+/**
+ * Validate that required local env file exists before deployment begins
+ * (Replaces load-time fatal crashes with clean, informative task validation)
+ */
+task('klytron:validate:env_files', function () {
+    $envFileLocal = get('env_file_local', '.env.production');
+    if (!file_exists($envFileLocal)) {
+        error("❌ Local environment file not found: {$envFileLocal}");
+        info("💡 Create {$envFileLocal} or configure 'env_file_local' before deploying.");
+        throw new \RuntimeException("Deployment aborted: {$envFileLocal} is required.");
+    }
+    info("✅ Local environment file verified: {$envFileLocal}");
+})->desc('Validate that required local env file exists');
+
+/**
+ * Validate that all path placeholders have been resolved
+ */
+task('klytron:validate:placeholders', function () {
+    $keysToCheck = ['deploy_path_parent', 'application_public_html', 'public_dir_path'];
+    foreach ($keysToCheck as $key) {
+        $val = get($key, '');
+        if (is_string($val) && preg_match('/\$\{([^}]+)\}/', $val, $matches)) {
+            error("❌ Unresolved path placeholder '{$matches[0]}' in config key '{$key}': '{$val}'");
+            info("💡 Ensure the corresponding variable (e.g. klytron_set_domain()) is configured before deployment.");
+            throw new \RuntimeException("Deployment aborted: Unresolved placeholder {$matches[0]} in {$key}.");
+        }
+    }
+    info("✅ All path placeholders resolved");
+})->desc('Validate all path placeholders are resolved');
+
+/**
+ * Validate remote user configuration (warn against root deployment)
+ */
+task('klytron:validate:remote_user', function () {
+    $user = get('remote_user', 'root');
+    if ($user === 'root') {
+        warning("⚠️  Deploying as 'root' user. Recommended best practice is a dedicated 'deployer' user with sudo escalation.");
+    } else {
+        info("✅ Deploying as non-root user: {$user}");
+    }
+})->desc('Validate remote user configuration');
+
+/**
+ * Built-in HTTP health check verifying the live site responds
+ */
+task('klytron:deploy:health_check', function () {
+    $url = get('application_public_url', '');
+    if (empty($url)) {
+        $domain = get('application_public_domain', '');
+        if (!empty($domain)) {
+            $url = "https://{$domain}";
+        }
+    }
+    if (empty($url)) {
+        info("⏭️  No application URL configured, skipping health check");
+        return;
+    }
+
+    info("🏥 Performing health check on: $url");
+    $timeout = get('health_check_timeout', 15);
+    $expectedCode = get('health_check_expected_code', 200);
+
+    try {
+        $code = run("curl -s -o /dev/null -w '%{http_code}' --max-time $timeout '$url' || echo '000'");
+        $code = trim($code);
+        if ($code == $expectedCode || ($expectedCode == 200 && in_array($code, ['200', '301', '302']))) {
+            info("✅ Application health check passed (HTTP $code)");
+        } else {
+            warning("⚠️  Application returned HTTP $code (expected $expectedCode) at $url");
+        }
+    } catch (\Throwable $e) {
+        warning("⚠️  Health check could not connect to $url: " . $e->getMessage());
+    }
+})->desc('HTTP health check against the live application URL');
+
+/**
+ * CI plan & task validation without requiring active SSH connection
+ */
+task('klytron:plan', function () {
+    info("📋 ===== KLYTRON DEPLOYMENT PLAN & VALIDATION =====");
+    info("Application:  " . get('application', 'not set'));
+    info("Repository:   " . get('repository', 'not set'));
+    info("Deploy Path:  " . get('deploy_path_parent', 'not set') . '/' . get('application', ''));
+    info("Domain:       " . get('application_public_domain', 'not set'));
+    info("Public HTML:  " . klytron_get_public_html_path());
+    info("Database:     " . get('database_type', 'none'));
+    info("Vite:         " . (get('supports_vite', false) ? 'enabled' : 'disabled'));
+    info("Filament:     " . (get('supports_filament', false) ? 'enabled' : 'auto/disabled'));
+
+    invoke('klytron:validate:env_files');
+    invoke('klytron:validate:placeholders');
+    invoke('klytron:validate:remote_user');
+
+    info("✅ All plan configurations validated successfully!");
+})->desc('Validate deployment configuration and task graph without SSH');
+
 ///////////////////////////////////////////////////////////////////////////////
 // FRAMEWORK-AGNOSTIC GROUP TASKS
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
- * Group task for environment deployment
+ * Group task for environment deployment (deduplicated - runs upload once)
  */
 task('klytron:deploy:environment:complete', [
-    'klytron:upload:env:production',
-    'klytron:deploy:env'
+    'klytron:upload:env:production'
 ])->desc('Complete environment file deployment');
 
 /**
@@ -985,7 +1062,10 @@ task('klytron:deploy:notify:complete', [
  */
 task('klytron:validate:basic', [
     'klytron:validate:deploy_path_parent',
-    'klytron:validate:domain'
+    'klytron:validate:domain',
+    'klytron:validate:env_files',
+    'klytron:validate:placeholders',
+    'klytron:validate:remote_user'
 ])->desc('Run basic validation checks');
 
 /**

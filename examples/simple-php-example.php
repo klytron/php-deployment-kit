@@ -38,8 +38,9 @@ klytron_set_paths(
 klytron_set_php_version('php8.3');
 
 // ── Host ──────────────────────────────────────────────────────────────────────
-
-klytron_configure_host('your-server.com', [
+// Recommended: read host, user, branch from environment variables
+// Set DEPLOY_HOST before running: export DEPLOY_HOST=your-server.com
+klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
     'remote_user' => 'deploy',
     'branch'      => 'main',
     'http_user'   => 'www-data',
@@ -56,15 +57,16 @@ klytron_configure_host('your-server.com', [
 // Simple PHP projects typically need almost nothing enabled.
 
 klytron_configure_project([
-    'type'             => 'php',    // No framework
-    'database'         => 'none',   // No DB operations
-    'env_file_local'   => '.env',   // Uploaded as-is (no encryption)
-    'env_file_remote'  => '.env',
-    'supports_nodejs'  => false,    // No npm build
-    'supports_sitemap' => false,
-    'verify_fonts'     => false,
-    'cleanup_assets'   => false,
-    'optimize_images'  => false,
+    'type'              => 'php',    // No framework
+    'database'          => 'none',   // No DB operations
+    'env_file_local'    => '.env',   // Uploaded as-is (no encryption)
+    'env_file_remote'   => '.env',
+    'check_git_pushed'  => true,
+    'supports_nodejs'   => false,    // No npm build
+    'supports_sitemap'  => false,
+    'verify_fonts'      => false,
+    'cleanup_assets'    => false,
+    'optimize_images'   => false,
     'enable_encryption' => false,
 ]);
 
@@ -92,22 +94,24 @@ klytron_configure_writable_dirs([
 // no Node.js, no database.
 
 task('deploy', [
-    'klytron:deploy:start_timer',       // Start wall-clock timer
-    'deploy:unlock',                    // Remove stale lock file
-    'klytron:deploy:fix_repo',          // git safe-dir + permission fixes
-    'deploy:setup',                     // Create directory structure on server
-    'deploy:lock',                      // Write deploy.lock
-    'deploy:release',                   // Create timestamped release dir
-    'deploy:update_code',               // git fetch + checkout
-    'deploy:shared',                    // Symlink shared files/dirs
-    'klytron:upload:env:production',    // rsync .env file to server
-    'deploy:vendors',                   // composer install (remove if no composer.json)
-    'deploy:writable',                  // chmod/chown writable dirs
-    'deploy:symlink',                   // Atomic: current → new release
+    'klytron:deploy:start_timer',        // Start wall-clock timer
+    'deploy:unlock',                     // Remove stale lock file
+    'klytron:deploy:check_pushed',       // Check all local commits are pushed
+    'klytron:validate:basic',            // Check local files exist before connecting
+    'deploy:setup',                      // Create directory structure on server
+    'deploy:lock',                       // Write deploy.lock
+    'deploy:release',                    // Create timestamped release dir
+    'deploy:update_code',                // git fetch + checkout
+    'deploy:shared',                     // Symlink shared files/dirs
+    'klytron:upload:env:production',     // rsync .env file to server
+    'deploy:vendors',                    // composer install (remove if no composer.json)
+    'deploy:writable',                   // chmod/chown writable dirs
+    'deploy:symlink',                    // Atomic: current → new release
     'klytron:deploy:access_permissions', // Final ownership/permission sweep
-    'deploy:unlock',                    // Remove deploy.lock
-    'deploy:cleanup',                   // Delete old releases (keep_releases)
-    'klytron:deploy:end_timer',         // Print elapsed time
+    'deploy:unlock',                     // Remove deploy.lock
+    'deploy:cleanup',                    // Delete old releases (keep_releases)
+    'klytron:deploy:health_check',       // Verify site responds via HTTP
+    'klytron:deploy:end_timer',          // Print elapsed time
 ])->desc('Deploy simple PHP site to production');
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────

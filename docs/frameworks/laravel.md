@@ -92,8 +92,10 @@ klytron_configure_project([
     'supports_storage_link' => true,        // Enable storage symlink
     'supports_passport' => false,           // Enable Passport support
     'supports_nodejs' => false,             // Enable Node.js builds
-    'supports_vite' => false,               // Enable Vite support
+    'supports_vite' => true,                // Enable Vite asset compilation (with hardlink cache)
+    'supports_filament' => true,            // Publish Filament v5 assets (php artisan filament:assets)
     'supports_mix' => false,                // Enable Mix support
+    'check_git_pushed' => true,             // Abort if unpushed commits exist locally
     'supports_queue' => false,              // Enable queue support
     'supports_schedule' => false,           // Enable scheduler support
     'supports_horizon' => false,            // Enable Horizon support
