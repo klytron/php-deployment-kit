@@ -7,7 +7,7 @@
  * Extracted from battle-tested deployment configurations
  * 
  * @package Klytron\PhpDeploymentKit
- * @version 1.1.2
+ * @version 1.1.3
  * @author Michael K. Laweh (klytron) (https://www.klytron.com)
  */
 
@@ -16,6 +16,25 @@ namespace Deployer;
 ///////////////////////////////////////////////////////////////////////////////
 // CHECK IF DEPLOYER FUNCTIONS ARE AVAILABLE
 ///////////////////////////////////////////////////////////////////////////////
+
+if (!function_exists('Deployer\klytron_mask_secrets')) {
+    /**
+     * Mask sensitive environment variables (KEY, PASSWORD, SECRET, TOKEN) in strings/dumps
+     */
+    function klytron_mask_secrets(string $content): string {
+        return (string) preg_replace_callback(
+            '/^([ \t]*[A-Z0-9_]*(?:KEY|PASSWORD|SECRET|TOKEN)[A-Z0-9_]*[ \t]*=[ \t]*)(.*)$/mi',
+            function ($matches) {
+                $val = trim($matches[2]);
+                if (empty($val)) {
+                    return $matches[1];
+                }
+                return $matches[1] . '********';
+            },
+            $content
+        );
+    }
+}
 
 // Deployer CLI loads functions automatically from its phar
 // If not available (e.g., being included outside Deployer context), exit early
@@ -360,7 +379,7 @@ if (!get('klytron_deployer_loaded', false)) {
      */
     function klytron_host(string $hostname, array $config = []): \Deployer\Host\Host {
         $defaults = [
-            'remote_user' => 'root',
+            'remote_user' => 'deployer',
             'forward_agent' => true,
             'branch' => 'main',
             'http_user' => 'www-data',
@@ -441,6 +460,67 @@ if (!get('klytron_deployer_loaded', false)) {
             $val = get('application_public_html', get('application_public_html_template', ''));
         }
         return klytron_resolve_placeholders($val);
+    }
+
+    /**
+     * Recursively resolve the task execution graph for a target task in Deployer.
+     *
+     * Validates that every referenced task (group tasks, before/after hooks) exists
+     * in the Deployer task collection, guards against circular dependencies, and returns
+     * the ordered list of task names to be executed.
+     *
+     * @param string $rootTask Root task name (e.g. 'deploy')
+     * @param array $stack Active call stack for cycle detection
+     * @return array<int, string> Ordered list of task names
+     * @throws \RuntimeException If a referenced task is missing or circular dependency found
+     */
+    function klytron_resolve_task_graph(string $rootTask = 'deploy', array &$stack = []): array {
+        $deployer = \Deployer\Deployer::get();
+        $tasks = $deployer->tasks;
+
+        if (!$tasks->has($rootTask)) {
+            throw new \RuntimeException("Plan validation failed: root task '{$rootTask}' does not exist in Deployer task collection.");
+        }
+
+        if (in_array($rootTask, $stack, true)) {
+            $cycle = implode(' -> ', array_merge($stack, [$rootTask]));
+            throw new \RuntimeException("Plan validation failed: circular task dependency detected: {$cycle}");
+        }
+
+        $task = $tasks->get($rootTask);
+        $stack[] = $rootTask;
+        $sequence = [];
+
+        // 1. Before hooks
+        foreach ($task->getBefore() as $beforeTask) {
+            if (!$tasks->has($beforeTask)) {
+                throw new \RuntimeException("Plan validation failed: task '{$rootTask}' references non-existent before-hook task '{$beforeTask}'");
+            }
+            $sequence = array_merge($sequence, klytron_resolve_task_graph($beforeTask, $stack));
+        }
+
+        // 2. The task itself or its group items
+        if ($task instanceof \Deployer\Task\GroupTask) {
+            foreach ($task->getGroup() as $childTask) {
+                if (!$tasks->has($childTask)) {
+                    throw new \RuntimeException("Plan validation failed: group task '{$rootTask}' references non-existent task '{$childTask}'");
+                }
+                $sequence = array_merge($sequence, klytron_resolve_task_graph($childTask, $stack));
+            }
+        } else {
+            $sequence[] = $rootTask;
+        }
+
+        // 3. After hooks
+        foreach ($task->getAfter() as $afterTask) {
+            if (!$tasks->has($afterTask)) {
+                throw new \RuntimeException("Plan validation failed: task '{$rootTask}' references non-existent after-hook task '{$afterTask}'");
+            }
+            $sequence = array_merge($sequence, klytron_resolve_task_graph($afterTask, $stack));
+        }
+
+        array_pop($stack);
+        return $sequence;
     }
 
     /**
@@ -571,7 +651,7 @@ if (!get('klytron_deployer_loaded', false)) {
      */
     function klytron_configure_host(string $hostname, array $config = []): \Deployer\Host\Host {
         $defaults = [
-            'remote_user' => getenv('DEPLOY_USER') ?: 'root',
+            'remote_user' => getenv('DEPLOY_USER') ?: 'deployer',
             'branch' => getenv('DEPLOY_BRANCH') ?: 'main',
             'http_user' => getenv('DEPLOY_HTTP_USER') ?: 'www-data',
             'http_group' => getenv('DEPLOY_HTTP_GROUP') ?: 'www-data',
@@ -801,7 +881,7 @@ if (!get('klytron_deployer_loaded', false)) {
 
     // Show loading message
     try {
-        writeln("🚀 <info>Klytron Deployer v1.1.2 loaded</info>");
+        writeln("🚀 <info>Klytron Deployer v1.1.3 loaded</info>");
         writeln("📚 <comment>Use 'dep klytron:help' for available commands</comment>");
     } catch (\Exception $e) {
         // Silently ignore if output fails

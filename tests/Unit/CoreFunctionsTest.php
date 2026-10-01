@@ -116,4 +116,34 @@ class CoreFunctionsTest extends TestCase
         $this->assertTrue(function_exists('Deployer\get'));
         $this->assertTrue(function_exists('Deployer\has'));
     }
+
+    public function testMaskSecrets(): void
+    {
+        if (!function_exists('Deployer\klytron_mask_secrets')) {
+            require_once __DIR__ . '/../../deployment-kit-core.php';
+        }
+
+        $input = <<<ENV
+APP_NAME=MyApplication
+APP_KEY=base64:AbCdEf123456789=
+DB_PASSWORD=SuperSecretPass123!
+API_SECRET_TOKEN=xyz_secret_token_999
+APP_URL=https://example.com
+DEPLOY_TOKEN=my_deploy_token_abc
+ENV;
+
+        $masked = \Deployer\klytron_mask_secrets($input);
+
+        $this->assertStringContainsString('APP_NAME=MyApplication', $masked);
+        $this->assertStringContainsString('APP_URL=https://example.com', $masked);
+        $this->assertStringNotContainsString('AbCdEf123456789', $masked);
+        $this->assertStringNotContainsString('SuperSecretPass123!', $masked);
+        $this->assertStringNotContainsString('xyz_secret_token_999', $masked);
+        $this->assertStringNotContainsString('my_deploy_token_abc', $masked);
+        $this->assertStringContainsString('APP_KEY=********', $masked);
+        $this->assertStringContainsString('DB_PASSWORD=********', $masked);
+        $this->assertStringContainsString('API_SECRET_TOKEN=********', $masked);
+        $this->assertStringContainsString('DEPLOY_TOKEN=********', $masked);
+    }
 }
+

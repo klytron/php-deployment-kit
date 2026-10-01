@@ -760,7 +760,7 @@ task('klytron:upload:env:production', function () {
     $envFileLocal = get('env_file_local');
     $envFileRemote = get('env_file_remote');
     
-    info("📤 Uploading environment file: $envFileLocal -> $envFileRemote");
+    info("📤 Uploading environment file: $envFileLocal -> $envFileRemote (secrets masked)");
 
     // Get the configurable shared directory path
     $sharedDirPath = get('shared_dir_path');
@@ -771,6 +771,11 @@ task('klytron:upload:env:production', function () {
     }
 
     $envFilePath = "$sharedDirPath/{$envFileRemote}";
+
+    if (get('debug_env_upload', false) && file_exists($envFileLocal)) {
+        $content = file_get_contents($envFileLocal) ?: '';
+        info("🔍 Masked environment file preview:\n" . klytron_mask_secrets($content));
+    }
 
     upload($envFileLocal, $envFilePath, [
         'timeout' => null,
@@ -974,9 +979,11 @@ task('klytron:validate:placeholders', function () {
  * Validate remote user configuration (warn against root deployment)
  */
 task('klytron:validate:remote_user', function () {
-    $user = get('remote_user', 'root');
+    $user = get('remote_user', 'deployer');
     if ($user === 'root') {
-        warning("⚠️  Deploying as 'root' user. Recommended best practice is a dedicated 'deployer' user with sudo escalation.");
+        warning("⚠️  Deploying as 'root' user is not recommended for production security.");
+        warning("💡 Recommendation: Use a dedicated 'deployer' user with sudo escalation.");
+        warning("📖 Sudoers guide: docs/quick-start.md#non-root-deployment-and-sudoers-setup");
     } else {
         info("✅ Deploying as non-root user: {$user}");
     }
@@ -1033,7 +1040,17 @@ task('klytron:plan', function () {
     invoke('klytron:validate:placeholders');
     invoke('klytron:validate:remote_user');
 
-    info("✅ All plan configurations validated successfully!");
+    info("🔍 Resolving task execution graph for 'deploy'...");
+    $targetTask = has('plan_target_task') ? get('plan_target_task') : 'deploy';
+    $resolvedTasks = klytron_resolve_task_graph($targetTask);
+
+    info("📋 Resolved Task Execution Sequence (" . count($resolvedTasks) . " steps):");
+    foreach ($resolvedTasks as $idx => $taskName) {
+        $num = str_pad((string) ($idx + 1), 2, ' ', STR_PAD_LEFT);
+        info("   {$num}. {$taskName}");
+    }
+
+    info("✅ All plan configurations and task graph validated successfully (0 missing tasks)!");
 })->desc('Validate deployment configuration and task graph without SSH');
 
 ///////////////////////////////////////////////////////////////////////////////

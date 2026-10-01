@@ -414,12 +414,12 @@ task('klytron:laravel:validate:environment', function () {
     }
 
     foreach ($criticalVars as $var) {
-        // Read from remote env file
-        $value = run("grep '^{$var}=' {{deploy_path}}/shared/{$envFile} | cut -d'=' -f2- | sed 's/^[\"'\'']//;s/[\"'\'']$//' || echo ''");
-        if (empty(trim($value))) {
-            $missingVars[] = $var;
-        } else {
+        // Safe existence check: does NOT echo raw secret values over SSH stdout
+        $hasVar = run("[ -f {{deploy_path}}/shared/{$envFile} ] && grep -q '^{$var}=' {{deploy_path}}/shared/{$envFile} && echo 'YES' || echo 'NO'");
+        if (trim($hasVar) === 'YES') {
             $foundVars[] = $var;
+        } else {
+            $missingVars[] = $var;
         }
     }
 
@@ -427,10 +427,11 @@ task('klytron:laravel:validate:environment', function () {
     if (!empty($foundVars)) {
         info("✅ Found " . count($foundVars) . " critical environment variables:");
         foreach ($foundVars as $var) {
-            $value = klytron_getEnvValue($var, $envFile, false);
-            $displayValue = (strlen($value) > 50) ? substr($value, 0, 47) . '...' : $value;
             if (preg_match('/(KEY|PASSWORD|SECRET|TOKEN)/i', $var)) {
                 $displayValue = '[HIDDEN]';
+            } else {
+                $value = klytron_getEnvValue($var, $envFile, false) ?? '';
+                $displayValue = (strlen($value) > 50) ? substr($value, 0, 47) . '...' : $value;
             }
             info("   ✓ $var = $displayValue");
         }

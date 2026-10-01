@@ -187,4 +187,71 @@ class DeploymentWorkflowTest extends TestCase
             }
         }
     }
+
+    public function testConsumerPlanScript(): void
+    {
+        $rootDir = realpath(__DIR__ . '/../../');
+        $consumerPlan = $rootDir . '/test/consumer-plan.php';
+        $this->assertFileExists($consumerPlan);
+
+        $template = $rootDir . '/templates/laravel-deploy.php.template';
+        $tmpDeploy = $rootDir . '/.tmp_test_plan_' . uniqid() . '.php';
+        file_put_contents($tmpDeploy, file_get_contents($template));
+
+        try {
+            $cmd = sprintf('php %s %s 2>&1', escapeshellarg($consumerPlan), escapeshellarg($tmpDeploy));
+            $output = [];
+            $exitCode = 0;
+            exec($cmd, $output, $exitCode);
+
+            $this->assertSame(0, $exitCode, "Consumer plan check failed:\n" . implode("\n", $output));
+            $this->assertStringContainsString('Resolved Task Execution Sequence', implode("\n", $output));
+        } finally {
+            if (file_exists($tmpDeploy)) {
+                unlink($tmpDeploy);
+            }
+        }
+    }
+
+    public function testTaskGraphResolutionDirect(): void
+    {
+        $rootDir = realpath(__DIR__ . '/../../');
+        $depBin = $rootDir . '/vendor/bin/dep';
+
+        $template = $rootDir . '/templates/laravel-deploy.php.template';
+        $tmpDeploy = $rootDir . '/.tmp_test_graph_' . uniqid() . '.php';
+        file_put_contents($tmpDeploy, file_get_contents($template));
+
+        $tmpEnv = $rootDir . '/.env.production';
+        $createdEnv = false;
+        if (!file_exists($tmpEnv)) {
+            file_put_contents($tmpEnv, "APP_NAME=GraphTest\nAPP_KEY=base64:stubkeyforplancheck1234567890=\n");
+            $createdEnv = true;
+        }
+
+        try {
+            $cmd = sprintf(
+                'DEPLOY_HOST=ci.test.internal %s klytron:plan -f %s 2>&1',
+                escapeshellcmd($depBin),
+                escapeshellarg($tmpDeploy)
+            );
+            $output = [];
+            $exitCode = 0;
+            exec($cmd, $output, $exitCode);
+
+            $outStr = implode("\n", $output);
+            $this->assertSame(0, $exitCode, "Task graph resolution via klytron:plan failed:\n" . $outStr);
+            $this->assertStringContainsString('Resolved Task Execution Sequence', $outStr);
+            $this->assertStringContainsString('deploy:symlink', $outStr);
+            $this->assertStringContainsString('klytron:laravel:filament:assets', $outStr);
+            $this->assertStringContainsString('All plan configurations and task graph validated successfully', $outStr);
+        } finally {
+            if (file_exists($tmpDeploy)) {
+                unlink($tmpDeploy);
+            }
+            if ($createdEnv && file_exists($tmpEnv)) {
+                unlink($tmpEnv);
+            }
+        }
+    }
 }

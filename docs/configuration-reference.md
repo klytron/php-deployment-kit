@@ -267,7 +267,7 @@ klytron_configure_host(
 
 #### Basic Settings
 ```php
-'remote_user' => 'root',               // SSH user
+'remote_user' => 'deployer',           // SSH user (default: deployer or DEPLOY_USER env)
 'port' => 22,                          // SSH port
 'identity_file' => '~/.ssh/id_rsa',    // SSH identity file
 'forward_agent' => true,               // Forward SSH agent

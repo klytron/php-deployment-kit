@@ -224,6 +224,57 @@ export LARAVEL_ENV_ENCRYPTION_KEY="$(gopass show -o Apps/laravel/laravel-env-enc
 vendor/bin/dep deploy
 ```
 
+## Non-Root Deployment and Sudoers Setup
+
+Deploying directly as `root` is discouraged for security reasons. The recommended approach is a dedicated non-root deployment user (e.g. `deployer`) with passwordless `sudo` restricted specifically to the system commands the kit needs.
+
+### 1. Create the Deployer User on the Server
+
+```bash
+sudo adduser --disabled-password --gecos "" deployer
+sudo usermod -aG www-data deployer
+```
+
+### 2. Configure Sudoers Permissions
+
+Create `/etc/sudoers.d/deployer` (using `sudo visudo -f /etc/sudoers.d/deployer`):
+
+```sudoers
+# /etc/sudoers.d/deployer
+# Allow deployer to reload services and manage deploy path permissions without password prompt
+
+# PHP-FPM service control
+deployer ALL=(ALL) NOPASSWD: /bin/systemctl reload php*-fpm, /bin/systemctl restart php*-fpm
+
+# Web server reload
+deployer ALL=(ALL) NOPASSWD: /bin/systemctl reload nginx, /bin/systemctl restart nginx, /bin/systemctl reload apache2, /bin/systemctl restart apache2
+
+# Directory ownership & permissions in deploy root
+deployer ALL=(ALL) NOPASSWD: /bin/chown -R www-data\:www-data /var/www/*, /bin/chown -R www-data /var/www/*
+deployer ALL=(ALL) NOPASSWD: /bin/chmod -R 775 /var/www/*, /bin/chmod -R 755 /var/www/*
+```
+
+Validate the file permissions:
+```bash
+sudo chmod 0440 /etc/sudoers.d/deployer
+```
+
+### 3. Configure `deploy.php`
+
+Specify `remote_user` in host configuration or set `DEPLOY_USER`:
+
+```php
+klytron_configure_host_from_env([
+    'default_host' => 'your-server.com',
+    'remote_user'  => 'deployer',
+]);
+```
+
+Or via environment variable:
+```bash
+export DEPLOY_USER=deployer
+```
+
 ## Unattended / CI deployments
 
 Add these to `deploy.php` to skip interactive prompts:

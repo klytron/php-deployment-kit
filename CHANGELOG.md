@@ -5,6 +5,23 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-10-01
+
+Task-graph resolution in `klytron:plan`, non-root `deployer` defaults with comprehensive sudoers documentation, SSH stdout secret suppression, GitHub Actions CI workflow, and standalone `test/consumer-plan.php` CI runner.
+
+### Added
+
+- **Task-Graph Resolution in `klytron:plan`**: Implemented `klytron_resolve_task_graph()` which traverses the entire task graph (including nested `GroupTask`s, `before` hooks, and `after` hooks), asserts that every referenced task exists in Deployer's task collection, detects circular dependencies, and displays the complete numbered execution sequence. Fails non-zero if any referenced task is missing.
+- **Standalone `test/consumer-plan.php` Runner**: Shipped `test/consumer-plan.php` (distributed with the package, not export-ignored) so consumer repositories can validate their `deploy.php` in CI with a single zero-SSH command (`php vendor/klytron/php-deployment-kit/test/consumer-plan.php` or `vendor/bin/klytron plan`). Automatically creates temporary stub environments in CI if `.env.production` is git-ignored.
+- **GitHub Actions CI Workflow**: Added `.github/workflows/ci.yml` matrix testing across PHP 8.1, 8.2, 8.3, and 8.4 verifying composer validation, PHPStan analysis, PHPUnit test suite, CLI scaffolding, and end-to-end plan resolution on every push, pull request, and tag.
+- **Non-Root & Sudoers Setup Documentation**: Added a comprehensive `Non-Root Deployment and Sudoers Setup` guide in `docs/quick-start.md` with an exact `/etc/sudoers.d/deployer` configuration covering PHP-FPM, Nginx, Apache2, and file permissions.
+
+### Changed & Hardened
+
+- **Non-Root Default Remote User**: Changed default `remote_user` in `deployment-kit-core.php` (`klytron_host` and `klytron_configure_host`) from `'root'` to `'deployer'` (honoring `DEPLOY_USER` env var). Updated `klytron:validate:remote_user` with a direct link to the sudoers setup guide.
+- **SSH Stdout Secret Leak Suppression**: Updated remote environment validation in `recipes/klytron-laravel-recipe.php` to use quiet existence checks (`[ -f ... ] && grep -q ...`) instead of printing variable values over SSH stdout. Secret values (`KEY`, `PASSWORD`, `SECRET`, `TOKEN`) are strictly masked as `[HIDDEN]` without querying their values.
+- **Unconditional Secret Masking Helper**: Defined `klytron_mask_secrets()` unconditionally in `deployment-kit-core.php` and integrated it into `klytron:upload:env:production` debug logging.
+
 ## [1.1.2] - 2026-10-01
 
 Fixes load-time closure evaluation crash on Deployer 7.5.12, wires Filament v4/v5 assets into the Laravel pipeline, hardens secret masking, introduces the standalone `klytron` CLI scaffolding tool, and expands CI test coverage for all examples and templates.

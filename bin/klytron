@@ -35,7 +35,7 @@ if (!$autoloaderFound && file_exists(__DIR__ . '/../src/Generators/DeployConfigG
 
 use Klytron\PhpDeploymentKit\Generators\DeployConfigGenerator;
 
-const KLYTRON_VERSION = '1.1.2';
+const KLYTRON_VERSION = '1.1.3';
 
 function printHeader(): void
 {
@@ -80,6 +80,13 @@ $command = $args[0];
 
 switch ($command) {
     case 'plan':
+        $consumerPlan = __DIR__ . '/../test/consumer-plan.php';
+        if (file_exists($consumerPlan)) {
+            $planTarget = $args[1] ?? '';
+            $arg = $planTarget ? (' ' . escapeshellarg($planTarget)) : '';
+            passthru(escapeshellcmd(PHP_BINARY) . ' ' . escapeshellarg($consumerPlan) . $arg, $exitCode);
+            exit($exitCode);
+        }
         $depCandidates = [
             getcwd() . '/vendor/bin/dep',
             __DIR__ . '/../vendor/bin/dep',
