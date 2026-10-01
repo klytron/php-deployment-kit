@@ -51,6 +51,11 @@ temp/
 coverage/
 phpunit.xml
 .phpunit.result.cache
+.phpunit.cache/
+tests-results.xml
+coverage-html/
+coverage.txt
+coverage.xml
 
 # Build artifacts
 build/

@@ -1,0 +1,10 @@
+parameters:
+    level: 4
+    paths:
+        - src
+    excludePaths:
+        - src/Commands
+        - src/Providers
+    bootstrapFiles:
+        - vendor/autoload.php
+        - vendor/deployer/deployer/src/functions.php

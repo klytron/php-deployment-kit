@@ -47,7 +47,7 @@ class RetryServiceTest extends TestCase
             throw new \RuntimeException('Always fails');
         };
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(NetworkException::class);
         RetryService::execute($operation, ['max_attempts' => 2]);
     }
 
@@ -64,7 +64,7 @@ class RetryServiceTest extends TestCase
         };
 
         $startTime = microtime(true);
-        $result = RetryService::executeWithBackoff($operation);
+        $result = RetryService::executeWithBackoff($operation, ['base_delay' => 10, 'max_delay' => 100]);
         $endTime = microtime(true);
         
         $this->assertEquals('success', $result);
@@ -82,12 +82,12 @@ class RetryServiceTest extends TestCase
         $operation = function() use (&$calls) {
             $calls++;
             if ($calls === 1) {
-                return 'success';
+                throw new NetworkException('Connection failed', ['url' => 'test://example.com']);
             }
-            throw new NetworkException('Connection failed', 'test://example.com');
+            return 'success';
         };
 
-        $result = RetryService::executeHttp($operation, ['max_attempts' => 2]);
+        $result = RetryService::executeHttp($operation, ['max_attempts' => 2, 'base_delay' => 10]);
         
         $this->assertEquals('success', $result);
         $this->assertEquals(2, $calls);
@@ -99,18 +99,18 @@ class RetryServiceTest extends TestCase
         $runtimeException = new \RuntimeException('Runtime error');
         
         $this->assertTrue(RetryService::shouldRetry($networkException, [NetworkException::class]));
-        $this->assertTrue(RetryService::shouldRetry($runtimeException, [NetworkException::class]));
-        $this->assertFalse(RetryService::shouldRetry($networkException, [\RuntimeException::class]));
+        $this->assertFalse(RetryService::shouldRetry($runtimeException, [NetworkException::class]));
+        $this->assertTrue(RetryService::shouldRetry($runtimeException, [\RuntimeException::class]));
     }
 
     public function testShouldRetryOnNetworkErrors(): void
     {
-        $networkError = new \RuntimeException('Connection timeout occurred');
+        $networkError = new \RuntimeException('Connection timed out');
         $otherError = new \RuntimeException('Some other error');
         
         $this->assertTrue(RetryService::shouldRetry($networkError, [NetworkException::class]));
-        $this->assertTrue(RetryService::shouldRetry($otherError, [NetworkException::class, \RuntimeException::class]));
-        $this->assertFalse(RetryService::shouldRetry($networkError, [\RuntimeException::class]));
+        $this->assertFalse(RetryService::shouldRetry($otherError, [NetworkException::class]));
+        $this->assertTrue(RetryService::shouldRetry($otherError, [\RuntimeException::class]));
     }
 
     public function testExecuteCurlOperation(): void

@@ -54,7 +54,13 @@ vendor/bin/dep --version
 ### Optional: Scaffold a deploy.php automatically
 
 ```bash
-# Auto-detect your project type (Laravel / Yii2 / simple PHP) and create deploy.php
+# Using the built-in CLI tool:
+vendor/bin/klytron init my-app --template=laravel
+
+# Or via Artisan in Laravel projects:
+php artisan klytron:init my-app
+
+# Or via install script:
 curl -sSL https://raw.githubusercontent.com/klytron/php-deployment-kit/main/install.sh | bash
 ```
 

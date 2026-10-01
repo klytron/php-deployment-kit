@@ -123,7 +123,7 @@ class DeploymentMetricsTask
     /**
      * Export metrics to file for analysis
      */
-    public static function exportMetrics(string $filePath = null): void
+    public static function exportMetrics(?string $filePath = null): void
     {
         if (!function_exists('Deployer\info')) {
             return;

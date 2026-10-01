@@ -9,6 +9,7 @@ use function Deployer\run;
 use function Deployer\test;
 use function Deployer\get;
 use function Deployer\set;
+use function Deployer\writeln;
 
 use Klytron\PhpDeploymentKit\Services\DeploymentValidationService;
 use Klytron\PhpDeploymentKit\Services\DeploymentErrorHandler;
@@ -155,9 +156,9 @@ class EnhancedDeploymentTask
         }
 
         $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Allow self-signed certs for testing
         
         $response = curl_exec($ch);

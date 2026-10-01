@@ -8,6 +8,7 @@ use Klytron\PhpDeploymentKit\Commands\KlytronFileDeCrypterCommand;
 use Klytron\PhpDeploymentKit\Commands\KlytronFileEnCrypterCommand;
 use Klytron\PhpDeploymentKit\Commands\KlytronStorageLinkCommand;
 use Klytron\PhpDeploymentKit\Commands\KlytronSqliteSetterCommand;
+use Klytron\PhpDeploymentKit\Commands\KlytronInitCommand;
 
 class PhpDeploymentKitServiceProvider extends ServiceProvider
 {
@@ -25,6 +26,7 @@ class PhpDeploymentKitServiceProvider extends ServiceProvider
                 KlytronFileEnCrypterCommand::class,
                 KlytronStorageLinkCommand::class,
                 KlytronSqliteSetterCommand::class,
+                KlytronInitCommand::class,
             ]);
         }
     }

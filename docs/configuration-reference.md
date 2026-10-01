@@ -157,14 +157,19 @@ klytron_configure_project(array $config);
 #### Database Configuration
 ```php
 'database' => 'mysql' | 'postgresql' | 'sqlite' | 'mariadb' | 'none'
-'db_host' => 'localhost',              // Database host
-'db_port' => 3306,                     // Database port
+'db_import_path' => 'database/live-db-exports', // Directory containing SQL dumps or SQLite (.sqlite/.db) files
+'sqlite_database_path' => '{{deploy_path}}/shared/database/database.sqlite', // Target SQLite database in shared dir
+'db_host' => 'localhost',              // Database host (MySQL/PostgreSQL)
+'db_port' => 3306,                     // Database port (MySQL/PostgreSQL)
 'db_name' => 'myapp',                  // Database name
 'db_user' => 'root',                   // Database user
 'db_password' => 'password',           // Database password
 'db_charset' => 'utf8mb4',             // Database charset
 'db_collation' => 'utf8mb4_unicode_ci', // Database collation
 ```
+
+> **SQLite Deployments:** When `database` is set to `'sqlite'`, `klytron:laravel:deploy:db:import` (or `klytron:laravel:deploy:db:import:sqlite`) discovers `.sqlite` or `.db` files (including encrypted `.sqlite.encrypted` / `.db.encrypted`) in `db_import_path`, puts the app into maintenance mode during copy, replaces `sqlite_database_path`, sets `http_user:http_group` ownership and `664` permissions, and executes `artisan cache:clear`.
+
 
 #### Environment Files
 ```php
@@ -723,12 +728,9 @@ task('deploy', [
     'klytron:deploy:end_timer',
 ])->desc('Deploy to production');
 
-after('klytron:laravel:deploy:success', 'klytron:system:restart');
+// PHP-FPM restart is already hooked automatically to klytron:laravel:deploy:success by the recipe
+// Local environment file (.env.production) is validated automatically by klytron:validate:basic
 after('deploy:shared', 'klytron:server:deploy:configs');
-
-if (!file_exists('.env.production')) {
-    throw new \RuntimeException('.env.production is required.');
-}
 ```
 
 ## 🎯 Configuration Best Practices

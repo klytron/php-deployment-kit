@@ -35,7 +35,13 @@ class KlytronDbSearchReplaceCommand extends Command
 
         $connection = DB::connection();
         $database = $connection->getDatabaseName();
-        $tables = $connection->getDoctrineSchemaManager()->listTableNames();
+        if (method_exists(Schema::class, 'getTableListing')) {
+            $tables = Schema::getTableListing();
+        } elseif (method_exists($connection, 'getDoctrineSchemaManager')) {
+            $tables = $connection->getDoctrineSchemaManager()->listTableNames();
+        } else {
+            $tables = $connection->getSchemaBuilder()->getTableListing();
+        }
 
         // Tables to skip (system tables)
         $skipTables = ['migrations', 'password_resets', 'failed_jobs', 'personal_access_tokens'];
@@ -70,11 +76,13 @@ class KlytronDbSearchReplaceCommand extends Command
                     $tableReplacements += $count;
 
                     if (!$dryRun) {
+                        $grammar = method_exists($connection, 'getQueryGrammar') ? $connection->getQueryGrammar() : null;
+                        $wrappedColumn = ($grammar && method_exists($grammar, 'wrap')) ? $grammar->wrap($column) : "`{$column}`";
                         // Use parameter binding to prevent SQL injection
                         DB::table($table)
                             ->where($column, 'LIKE', "%{$devurl}%")
                             ->update([
-                                $column => DB::raw("REPLACE(`$column`, ?, ?)"),
+                                $column => DB::raw("REPLACE({$wrappedColumn}, ?, ?)"),
                             ], [$devurl, $produrl]);
                     }
                 }

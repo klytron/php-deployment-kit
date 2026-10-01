@@ -25,6 +25,8 @@ class DeploymentWorkflowTest extends TestCase
             'klytron-yii2-recipe.php',
             'klytron-php-recipe.php',
             'klytron-server-recipe.php',
+            'laravel.php',
+            'yii2.php',
         ];
 
         foreach ($expectedRecipes as $recipe) {
@@ -86,6 +88,103 @@ class DeploymentWorkflowTest extends TestCase
         foreach ($expectedDocs as $doc) {
             $docPath = $docsDir . $doc;
             $this->assertFileExists($docPath, "Documentation file {$doc} should exist");
+        }
+    }
+
+    public function testExamplesAndTemplatesCanResolvePlan(): void
+    {
+        $rootDir = realpath(__DIR__ . '/../../');
+        $depBin = $rootDir . '/vendor/bin/dep';
+
+        if (!file_exists($depBin)) {
+            $this->markTestSkipped('Deployer binary not found.');
+        }
+
+        // Ensure vendor/klytron/php-deployment-kit symlink exists for tests
+        $vendorKlytronDir = $rootDir . '/vendor/klytron';
+        if (!is_dir($vendorKlytronDir)) {
+            mkdir($vendorKlytronDir, 0755, true);
+        }
+        $symlinkPath = $vendorKlytronDir . '/php-deployment-kit';
+        if (!file_exists($symlinkPath)) {
+            symlink($rootDir, $symlinkPath);
+        }
+
+        $targets = [
+            $rootDir . '/examples/laravel-basic-example.php',
+            $rootDir . '/examples/simple-php-example.php',
+            $rootDir . '/templates/laravel-deploy.php.template',
+            $rootDir . '/templates/simple-php.php.template',
+            $rootDir . '/templates/deploy.php.template',
+        ];
+
+        foreach ($targets as $target) {
+            $this->assertFileExists($target);
+
+            // Create a temp deploy.php at repo root so __DIR__ . '/vendor/...' resolves
+            $tmpDeploy = $rootDir . '/.tmp_test_deploy_' . uniqid() . '.php';
+            file_put_contents($tmpDeploy, file_get_contents($target));
+
+            try {
+                $cmd = sprintf(
+                    'DEPLOY_HOST=test.example.com %s list -f %s 2>&1',
+                    escapeshellcmd($depBin),
+                    escapeshellarg($tmpDeploy)
+                );
+                $output = [];
+                $exitCode = 0;
+                exec($cmd, $output, $exitCode);
+
+                $this->assertSame(
+                    0,
+                    $exitCode,
+                    sprintf("Failed to load %s via dep list:\n%s", basename($target), implode("\n", $output))
+                );
+            } finally {
+                if (file_exists($tmpDeploy)) {
+                    unlink($tmpDeploy);
+                }
+            }
+        }
+    }
+
+    public function testGeneratedConfigResolvesPlan(): void
+    {
+        $rootDir = realpath(__DIR__ . '/../../');
+        $depBin = $rootDir . '/vendor/bin/dep';
+
+        if (!file_exists($depBin)) {
+            $this->markTestSkipped('Deployer binary not found.');
+        }
+
+        $generator = new \Klytron\PhpDeploymentKit\Generators\DeployConfigGenerator();
+        $generatedContent = $generator->generate('integration-test-app', 'laravel', [
+            'domain' => 'integration.example.com',
+            'repo' => 'git@github.com:klytron/test-repo.git',
+        ]);
+
+        $tmpDeploy = $rootDir . '/.tmp_test_generated_' . uniqid() . '.php';
+        file_put_contents($tmpDeploy, $generatedContent);
+
+        try {
+            $cmd = sprintf(
+                'DEPLOY_HOST=test.example.com %s list -f %s 2>&1',
+                escapeshellcmd($depBin),
+                escapeshellarg($tmpDeploy)
+            );
+            $output = [];
+            $exitCode = 0;
+            exec($cmd, $output, $exitCode);
+
+            $this->assertSame(
+                0,
+                $exitCode,
+                sprintf("Generated config failed dep list:\n%s", implode("\n", $output))
+            );
+        } finally {
+            if (file_exists($tmpDeploy)) {
+                unlink($tmpDeploy);
+            }
         }
     }
 }

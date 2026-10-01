@@ -10,8 +10,7 @@ use function Deployer\test;
 use function Deployer\get;
 use function Deployer\set;
 
-use Deployer\Exception\RuntimeException;
-use Deployer\Task\TaskParameters;
+use RuntimeException;
 
 /**
  * Environment Decryption Task

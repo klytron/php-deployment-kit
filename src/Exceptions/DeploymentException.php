@@ -3,6 +3,7 @@
 namespace Klytron\PhpDeploymentKit\Exceptions;
 
 use Exception;
+use Throwable;
 
 /**
  * Base Deployment Exception

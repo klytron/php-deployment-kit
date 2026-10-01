@@ -85,7 +85,7 @@ class RetryService
         ], $options));
     }
 
-    private static function shouldRetry(Exception $exception, array $retryOn): bool
+    public static function shouldRetry(Exception $exception, array $retryOn): bool
     {
         foreach ($retryOn as $retryClass) {
             if ($exception instanceof $retryClass) {
@@ -132,7 +132,7 @@ class RetryService
             'base_delay' => 500,
             'max_delay' => 5000,
             'backoff_multiplier' => 1.5,
-            'retry_on' => [NetworkException::class]
+            'retry_on' => [NetworkException::class, \RuntimeException::class]
         ], $options));
     }
 }

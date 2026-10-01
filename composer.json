@@ -56,6 +56,9 @@
       "Klytron\\PhpDeploymentKit\\Tests\\": "tests/"
     }
   },
+  "bin": [
+    "bin/klytron"
+  ],
   "scripts": {
     "test": "phpunit",
     "analyse": "phpstan analyse",
@@ -73,7 +76,8 @@
         "recipes/klytron-server-recipe.php",
         "recipes/klytron-php-recipe.php",
         "recipes/klytron-yii2-recipe.php",
-        "recipes/laravel.php"
+        "recipes/laravel.php",
+        "recipes/yii2.php"
       ]
     },
     "laravel": {

@@ -229,6 +229,33 @@ Set the import directory with:
 set('db_import_path', 'database/live-db-exports');
 ```
 
+When `database_type` is `'sqlite'`, this task automatically delegates to `klytron:laravel:deploy:db:import:sqlite`.
+
+### `klytron:laravel:deploy:db:import:sqlite`
+
+Laravel SQLite database replacement task with maintenance protection.
+
+```bash
+vendor/bin/dep klytron:laravel:deploy:db:import:sqlite
+```
+
+**What it does:**
+1. Scans `db_import_path` (default: `database/live-db-exports`) for `.sqlite`, `.db`, `.sqlite.encrypted`, or `.db.encrypted` files.
+2. Automatically decrypts encrypted files using `klytron:file:decrypt` if found.
+3. Selects the newest file (supporting datetime-sorted filenames or modification timestamps).
+4. Puts application into maintenance mode (`artisan down`) to prevent write race conditions during file replacement.
+5. Replaces target SQLite database file at `sqlite_database_path` (default: `{{deploy_path}}/shared/database/database.sqlite`).
+6. Ensures ownership (`http_user:http_group`) and permissions (`664`).
+7. Clears Laravel caches (`artisan cache:clear`).
+8. Brings application back online (`artisan up`).
+
+Configuration:
+```php
+set('database_type', 'sqlite');
+set('db_import_path', 'database/live-db-exports');
+set('sqlite_database_path', '{{deploy_path}}/shared/database/database.sqlite');
+```
+
 ### `deploy:unlock`
 
 Unlock deployment after completion.

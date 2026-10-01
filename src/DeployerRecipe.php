@@ -6,7 +6,7 @@
  * Main recipe file that provides helper functions for deployment configuration.
  *
  * @package Klytron\PhpDeploymentKit
- * @version 1.1.1
+ * @version 1.1.2
  * @author Michael K. Laweh (klytron) (https://www.klytron.com)
  * @license MIT
  */

@@ -18,14 +18,16 @@ class CoreFunctionsTest extends TestCase
                 namespace Deployer {
                     function set($key, $value = null) {
                         static $config = [];
-                        if ($value === null) {
+                        if (func_num_args() === 1) {
                             return $config[$key] ?? null;
                         }
                         $config[$key] = $value;
+                        return $value;
                     }
                     
                     function get($key, $default = null) {
-                        return set($key, $default);
+                        $val = set($key);
+                        return $val !== null ? $val : $default;
                     }
                     
                     function has($key) {
@@ -42,6 +44,18 @@ class CoreFunctionsTest extends TestCase
                 }
             ');
         }
+
+        Deployer\set('ssh_key_paths', [
+            'windows' => [
+                '%USERPROFILE%\\.ssh\\id_rsa',
+                '%USERPROFILE%\\.ssh\\id_ed25519',
+            ],
+            'unix' => [
+                '~/.ssh/id_rsa',
+                '~/.ssh/id_ed25519'
+            ]
+        ]);
+        Deployer\set('php_binary_path', '/usr/bin/php8.3');
     }
 
     public function testSshKeyDetection()

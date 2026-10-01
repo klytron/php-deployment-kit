@@ -7,7 +7,7 @@
  * Extracted from battle-tested deployment configurations
  * 
  * @package Klytron\PhpDeploymentKit
- * @version 1.1.1
+ * @version 1.1.2
  * @author Michael K. Laweh (klytron) (https://www.klytron.com)
  */
 
@@ -636,6 +636,7 @@ if (!get('klytron_deployer_loaded', false)) {
         $defaults = [
             'type' => 'laravel',
             'database' => 'mysql',
+            'sqlite_database_path' => '{{deploy_path}}/shared/database/database.sqlite',
             'env_file_local' => '.env.production',
             'env_file_remote' => '.env',
             'db_import_path' => 'database/live-db-exports',
@@ -659,6 +660,7 @@ if (!get('klytron_deployer_loaded', false)) {
 
         set('project_type', $config['type']);
         set('database_type', $config['database']);
+        set('sqlite_database_path', $config['sqlite_database_path']);
         set('env_file_local', $config['env_file_local']);
         set('env_file_remote', $config['env_file_remote']);
         set('db_import_path', $config['db_import_path']);
@@ -799,7 +801,7 @@ if (!get('klytron_deployer_loaded', false)) {
 
     // Show loading message
     try {
-        writeln("🚀 <info>Klytron Deployer v1.1.1 loaded</info>");
+        writeln("🚀 <info>Klytron Deployer v1.1.2 loaded</info>");
         writeln("📚 <comment>Use 'dep klytron:help' for available commands</comment>");
     } catch (\Exception $e) {
         // Silently ignore if output fails

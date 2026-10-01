@@ -20,11 +20,15 @@ if (file_exists('vendor/deployer/deployer/recipe/laravel.php')) {
 }
 
 // Override Deployer provision's interactive ask() closure to prevent hangs
-if (!has('php_version') || is_callable(get('php_version'))) {
-    set('php_version', '8.3');
-}
+// NOTE: Never call get('php_version') at file load time — Deployer provision defines it
+// as a closure calling ask(), which fatal-crashes outside a task context with:
+// "Deployer\Exception\Exception: 'Deployer\ask' can only be used within a task."
 if (!has('klytron_php_version')) {
     set('klytron_php_version', 'php8.3');
+    set('php_version', '8.3');
+} else {
+    $existing = get('klytron_php_version');
+    set('php_version', is_string($existing) ? str_replace('php', '', $existing) : '8.3');
 }
 
 // Load core framework-agnostic tasks
@@ -222,16 +226,17 @@ task('klytron:laravel:init:questions', function () {
         } else if ($databaseType !== 'none') {
             // Handle SQLite databases differently
             if ($databaseType === 'sqlite') {
-                info("🗄️  SQLite database detected - database import not applicable");
-                set('shouldImportDbFile', false);
-                
                 $autoDbOp = get('auto_database_operation', null);
                 if ($autoDbOp !== null) {
                     $shouldRunMigration = ($autoDbOp === 'migrations' || $autoDbOp === 'both');
+                    $shouldImportDbFile = ($autoDbOp === 'import' || $autoDbOp === 'both');
                     info("🤖 Auto-setting SQLite migration: " . ($shouldRunMigration ? 'YES' : 'NO'));
+                    info("🤖 Auto-setting SQLite import: " . ($shouldImportDbFile ? 'YES' : 'NO'));
                 } else {
+                    $shouldImportDbFile = askConfirmation("Import/replace SQLite database from dump file?", false);
                     $shouldRunMigration = askConfirmation("Run SQLite database migrations?", true);
                 }
+                set('shouldImportDbFile', $shouldImportDbFile);
                 set('shouldRunMigration', $shouldRunMigration);
             } else {
                 $shouldImportDbFile = askConfirmation("Import database from SQL file?", false);
@@ -286,7 +291,7 @@ task('klytron:laravel:init:questions', function () {
     $databaseType = get('database_type', 'mysql');
     if ($databaseType === 'sqlite') {
         info("Database Type: 🗄️ SQLite");
-        info("Import Database: ❌ N/A (SQLite is file-based)");
+        info("Import Database: " . (get('shouldImportDbFile') ? "📥 YES (SQLite file replacement)" : "❌ NO"));
         info("Run Migrations: " . (get('shouldRunMigration') ? "🚀 YES" : "❌ NO"));
     } else {
         info("Database Type: 🗄️ " . strtoupper($databaseType));
@@ -357,7 +362,7 @@ task('klytron:laravel:validate:environment:local', function () {
         foreach ($foundVars as $var) {
             $value = klytron_getEnvValue($var, $envFile, false);
             $displayValue = (strlen($value) > 30) ? substr($value, 0, 30) . '...' : $value;
-            if (str_contains($var, 'KEY') || str_contains($var, 'PASSWORD')) {
+            if (preg_match('/(KEY|PASSWORD|SECRET|TOKEN)/i', $var)) {
                 $displayValue = '[HIDDEN]';
             }
             writeln("   ✓ <comment>$var</comment> = $displayValue");
@@ -424,7 +429,7 @@ task('klytron:laravel:validate:environment', function () {
         foreach ($foundVars as $var) {
             $value = klytron_getEnvValue($var, $envFile, false);
             $displayValue = (strlen($value) > 50) ? substr($value, 0, 47) . '...' : $value;
-            if (strpos($var, 'PASSWORD') !== false || strpos($var, 'SECRET') !== false || strpos($var, 'KEY') !== false) {
+            if (preg_match('/(KEY|PASSWORD|SECRET|TOKEN)/i', $var)) {
                 $displayValue = '[HIDDEN]';
             }
             info("   ✓ $var = $displayValue");
@@ -560,7 +565,7 @@ task('klytron:laravel:local:env:ensure_decrypted', function () {
         }
 
         if (!file_exists($encryptedFile)) {
-            warning("⚠️  Missing env file '{$plainFile}' - deployment may fail. Create it manually or provide encrypted version.");
+            warning("⚠️  Missing required env file '{$plainFile}' - deployment may fail. Create it manually or provide encrypted version.");
             continue;
         }
 
@@ -1034,6 +1039,62 @@ task('klytron:laravel:deploy:db:migrate', function () {
     }
 })->desc('Run database migrations with SQLite support');
 
+task('klytron:laravel:deploy:db:import:sqlite', function () {
+    $dbImportPath = get('db_import_path', 'database/live-db-exports');
+
+    // Check for encrypted SQLite files and decrypt if needed
+    $encryptedFiles = run("find {{release_path}}/{$dbImportPath} -type f \\( -name '*.sqlite.encrypted' -o -name '*.db.encrypted' \\) 2>/dev/null || true");
+    if (!empty(trim($encryptedFiles))) {
+        info("🔐 Found encrypted SQLite database file(s), decrypting...");
+        try {
+            invoke('klytron:file:decrypt');
+        } catch (\Throwable $e) {
+            warning("⚠️  Automatic decryption failed: " . $e->getMessage());
+        }
+    }
+
+    // Prefer time-sorted discovery: newest files first
+    $sortedFound = run("find {{release_path}}/{$dbImportPath} -type f \\( -name '*.sqlite' -o -name '*.db' \\) -printf '%T@ %p\\n' 2>/dev/null | sort -nr | awk '{\\$1=\"\"; sub(/^ /, \"\"); print}' | head -n 1 || true");
+    $sqliteCandidate = trim($sortedFound);
+
+    if (empty($sqliteCandidate)) {
+        $sqliteCandidate = trim(run("find {{release_path}}/{$dbImportPath} -type f \\( -name '*.sqlite' -o -name '*.db' \\) 2>/dev/null | head -n 1 || true"));
+    }
+
+    if (empty($sqliteCandidate)) {
+        info("🗄️  SQLite database detected - no .sqlite/.db import file found in {$dbImportPath}, using existing shared database");
+        return;
+    }
+
+    info("🗄️  Found SQLite database file to import: {$sqliteCandidate}");
+
+    // Temporarily enter maintenance mode during file copy to prevent write race conditions
+    $wasDowned = false;
+    try {
+        run('cd {{release_path}} && {{bin/php}} artisan down 2>/dev/null || true');
+        $wasDowned = true;
+    } catch (\Throwable $e) {
+        // Ignore if artisan down cannot run
+    }
+
+    $targetDb = get('sqlite_database_path', '{{deploy_path}}/shared/database/database.sqlite');
+    $targetDir = dirname($targetDb);
+    run("mkdir -p '{$targetDir}'");
+    run("cp -f '{$sqliteCandidate}' '{$targetDb}'");
+    $httpUser = get('http_user', 'www-data');
+    $httpGroup = get('http_group', 'www-data');
+    run("sudo chown {$httpUser}:{$httpGroup} '{$targetDb}' 2>/dev/null || true");
+    run("sudo chmod 664 '{$targetDb}' 2>/dev/null || true");
+    info("✅ SQLite database replaced at {$targetDb}");
+
+    // Clear caches
+    run('cd {{release_path}} && {{bin/php}} artisan cache:clear 2>/dev/null || true');
+
+    if ($wasDowned) {
+        run('cd {{release_path}} && {{bin/php}} artisan up 2>/dev/null || true');
+    }
+})->desc('Import and replace SQLite database from dump file (with maintenance mode, permissions, and cache clear)');
+
 task('klytron:laravel:deploy:db:import', function () {
     // Only run if shouldImportDbFile is set to true
     if (!get('shouldImportDbFile', false)) {
@@ -1044,28 +1105,9 @@ task('klytron:laravel:deploy:db:import', function () {
     // Detect database type from project configuration
     $databaseType = get('database_type', 'mysql'); // Default to mysql if not specified
     
-    // For SQLite projects, check if a dump/seed SQLite database file exists to replace shared database
+    // For SQLite projects, delegate to dedicated sqlite import task
     if ($databaseType === 'sqlite') {
-        $dbImportPath = get('db_import_path', 'database/live-db-exports');
-        $sqliteCandidate = run("find {{release_path}}/{$dbImportPath} -type f \\( -name '*.sqlite' -o -name '*.db' \\) 2>/dev/null | head -n 1 || true");
-        $sqliteCandidate = trim($sqliteCandidate);
-
-        if (!empty($sqliteCandidate)) {
-            info("🗄️  Found SQLite database file to import: {$sqliteCandidate}");
-            $targetDb = get('sqlite_database_path', '{{deploy_path}}/shared/database/database.sqlite');
-            $targetDir = dirname($targetDb);
-            run("mkdir -p '{$targetDir}'");
-            run("cp -f '{$sqliteCandidate}' '{$targetDb}'");
-            $httpUser = get('http_user', 'www-data');
-            $httpGroup = get('http_group', 'www-data');
-            run("sudo chown {$httpUser}:{$httpGroup} '{$targetDb}' 2>/dev/null || true");
-            run("sudo chmod 664 '{$targetDb}' 2>/dev/null || true");
-            info("✅ SQLite database replaced at {$targetDb}");
-            run('cd {{release_path}} && {{bin/php}} artisan cache:clear');
-            return;
-        }
-
-        info("🗄️  SQLite database detected - no .sqlite/.db import file found in {$dbImportPath}, using existing shared database");
+        invoke('klytron:laravel:deploy:db:import:sqlite');
         return;
     }
 
@@ -1591,7 +1633,8 @@ function klytron_laravel_deploy_flow(): array {
         'klytron:laravel:deploy:environment:complete',   // Group task: env upload + deployment
         'deploy:env',
         'deploy:vendors',
-'klytron:laravel:node:vite:build:local',
+        'klytron:laravel:node:vite:build:local',
+        'klytron:laravel:filament:assets',               // Publish Filament v4/v5 vendor assets (pre-symlink)
         'klytron:laravel:deploy:database:complete',      // Group task: migration + import (conditional)
         'klytron:laravel:deploy:passport:install',
         'deploy:writable',

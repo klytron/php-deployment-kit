@@ -1,0 +1,161 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Klytron CLI Tool
+ *
+ * Provides quick scaffolding and helpers for PHP Deployment Kit projects.
+ *
+ * Usage:
+ *   vendor/bin/klytron init [app-name] [options]
+ *   vendor/bin/klytron plan
+ *   vendor/bin/klytron --help
+ */
+
+declare(strict_types=1);
+
+// Locate composer autoloader
+$autoloadCandidates = [
+    getcwd() . '/vendor/autoload.php',
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php',
+];
+
+$autoloaderFound = false;
+foreach ($autoloadCandidates as $candidate) {
+    if (file_exists($candidate)) {
+        require_once $candidate;
+        $autoloaderFound = true;
+        break;
+    }
+}
+
+if (!$autoloaderFound && file_exists(__DIR__ . '/../src/Generators/DeployConfigGenerator.php')) {
+    require_once __DIR__ . '/../src/Generators/DeployConfigGenerator.php';
+}
+
+use Klytron\PhpDeploymentKit\Generators\DeployConfigGenerator;
+
+const KLYTRON_VERSION = '1.1.2';
+
+function printHeader(): void
+{
+    echo "\033[1;36mKlytron Deployment Kit CLI\033[0m v" . KLYTRON_VERSION . "\n\n";
+}
+
+function printHelp(): void
+{
+    printHeader();
+    echo "Usage:\n";
+    echo "  klytron <command> [arguments] [options]\n\n";
+    echo "Commands:\n";
+    echo "  \033[1;32minit\033[0m [app-name]   Initialize canonical deploy.php configuration\n";
+    echo "  \033[1;32mplan\033[0m              Run pre-deployment plan check (dep klytron:plan)\n";
+    echo "  \033[1;32mhelp\033[0m              Display this help message\n";
+    echo "  \033[1;32mversion\033[0m           Display version information\n\n";
+    echo "Init Options:\n";
+    echo "  \033[33m--template=<name>\033[0m  Template to use: laravel (default), yii2, simple, generic\n";
+    echo "  \033[33m--repo=<url>\033[0m       Git repository URL\n";
+    echo "  \033[33m--domain=<domain>\033[0m  Production domain name\n";
+    echo "  \033[33m--host=<host>\033[0m      Production deploy host\n";
+    echo "  \033[33m--force\033[0m            Overwrite existing deploy.php\n\n";
+    echo "Examples:\n";
+    echo "  vendor/bin/klytron init my-laravel-app\n";
+    echo "  vendor/bin/klytron init my-api --template=laravel --domain=api.example.com\n";
+    echo "  vendor/bin/klytron plan\n";
+}
+
+$args = array_slice($argv, 1);
+
+if (empty($args) || in_array('--help', $args, true) || in_array('-h', $args, true) || in_array('help', $args, true)) {
+    printHelp();
+    exit(0);
+}
+
+if (in_array('--version', $args, true) || in_array('-v', $args, true) || in_array('version', $args, true)) {
+    echo "Klytron Deployment Kit v" . KLYTRON_VERSION . "\n";
+    exit(0);
+}
+
+$command = $args[0];
+
+switch ($command) {
+    case 'plan':
+        $depCandidates = [
+            getcwd() . '/vendor/bin/dep',
+            __DIR__ . '/../vendor/bin/dep',
+            __DIR__ . '/../../../bin/dep',
+        ];
+        $depBin = null;
+        foreach ($depCandidates as $candidate) {
+            if (file_exists($candidate) && is_executable($candidate)) {
+                $depBin = $candidate;
+                break;
+            }
+        }
+        if (!$depBin) {
+            $depBin = 'dep';
+        }
+        passthru(escapeshellcmd($depBin) . ' klytron:plan', $exitCode);
+        exit($exitCode);
+
+    case 'init':
+        printHeader();
+
+        $appName = null;
+        $template = 'laravel';
+        $options = [];
+        $force = false;
+
+        for ($i = 1; $i < count($args); $i++) {
+            $arg = $args[$i];
+            if ($arg === '--force') {
+                $force = true;
+            } elseif (str_starts_with($arg, '--template=')) {
+                $template = substr($arg, 11);
+            } elseif (str_starts_with($arg, '--repo=')) {
+                $options['repo'] = substr($arg, 7);
+            } elseif (str_starts_with($arg, '--domain=')) {
+                $options['domain'] = substr($arg, 9);
+            } elseif (str_starts_with($arg, '--host=')) {
+                $options['host'] = substr($arg, 7);
+            } elseif (!str_starts_with($arg, '--') && $appName === null) {
+                $appName = $arg;
+            }
+        }
+
+        if (empty($appName)) {
+            $appName = basename(getcwd());
+        }
+
+        if (!class_exists(DeployConfigGenerator::class)) {
+            fwrite(STDERR, "\033[1;31mError:\033[0m DeployConfigGenerator class not found. Run 'composer install' first.\n");
+            exit(1);
+        }
+
+        $generator = new DeployConfigGenerator();
+
+        try {
+            $targetDir = getcwd();
+            $result = $generator->write($targetDir, $appName, $template, $options, $force);
+
+            echo "\033[1;32m✔ Successfully initialized deployment configuration for '{$appName}'!\033[0m\n\n";
+            echo "Files created:\n";
+            foreach ($result['files'] as $file) {
+                echo "  \033[1;34m+\033[0m " . basename($file) . "\n";
+            }
+            echo "\n\033[1;33mNext steps:\033[0m\n";
+            echo "  1. Review and adjust \033[1mdeploy.php\033[0m\n";
+            echo "  2. Configure environment variables (e.g. \033[1mexport DEPLOY_HOST=your-server.com\033[0m)\n";
+            echo "  3. Validate deployment plan: \033[1mvendor/bin/klytron plan\033[0m or \033[1mvendor/bin/dep klytron:plan\033[0m\n";
+            echo "  4. Deploy: \033[1mvendor/bin/dep deploy\033[0m\n\n";
+            exit(0);
+        } catch (\Throwable $e) {
+            fwrite(STDERR, "\033[1;31mError:\033[0m " . $e->getMessage() . "\n");
+            exit(1);
+        }
+
+    default:
+        fwrite(STDERR, "\033[1;31mUnknown command:\033[0m {$command}\n");
+        echo "Run \033[1mvendor/bin/klytron --help\033[0m for usage.\n";
+        exit(1);
+}

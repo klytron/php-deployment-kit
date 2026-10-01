@@ -105,12 +105,9 @@ task('deploy', [
     'klytron:deploy:end_timer',
 ])->desc('Deploy to production');
 
-after('klytron:laravel:deploy:success', 'klytron:system:restart');
+// PHP-FPM restart is already hooked automatically to klytron:laravel:deploy:success by the recipe
+// Local environment file (.env.production) is validated automatically by klytron:validate:basic
 after('deploy:shared', 'klytron:server:deploy:configs');
-
-if (!file_exists('.env.production')) {
-    throw new \RuntimeException('.env.production is required.');
-}
 ```
 
 ### Simple PHP project

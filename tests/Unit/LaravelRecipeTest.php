@@ -47,8 +47,9 @@ class LaravelRecipeTest extends TestCase
         
         $expectedTasks = [
             'klytron:laravel:init:questions',
-            'klytron:laravel:deploy',
-            'klytron:laravel:rollback',
+            'klytron:laravel:deploy:success',
+            'klytron:laravel:filament:assets',
+            'klytron:laravel:deploy:db:migrate',
         ];
 
         foreach ($expectedTasks as $task) {

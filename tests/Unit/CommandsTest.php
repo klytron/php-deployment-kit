@@ -59,6 +59,7 @@ class CommandsTest extends TestCase
             'KlytronFileEnCrypterCommand',
             'KlytronFileDeCrypterCommand',
             'KlytronSqliteSetterCommand',
+            'KlytronInitCommand',
         ];
 
         foreach ($expectedCommands as $command) {

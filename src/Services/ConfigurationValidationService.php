@@ -148,7 +148,7 @@ class ConfigurationValidationService
             ];
         }
 
-        if (str_starts_with($path, '/')) {
+        if ($field !== 'deploy_path' && str_starts_with($path, '/')) {
             self::$warnings[] = [
                 'field' => $field,
                 'message' => "Path should be relative to deploy_path: {$path}",
@@ -160,17 +160,20 @@ class ConfigurationValidationService
 
     private static function validatePhpVersion(string $version): void
     {
-        if (!preg_match('/^\d+\.\d+(\.\d+)?$/', $version)) {
+        $normalizedVersion = preg_replace('/^php/i', '', trim($version));
+        if (!preg_match('/^\d+\.\d+(\.\d+)?$/', $normalizedVersion)) {
             self::$errors[] = [
                 'field' => 'php_version',
                 'message' => "Invalid PHP version format: {$version}",
                 'type' => 'format',
-                'suggestion' => 'Use format like 8.1, 8.2, or 8.1.0'
+                'suggestion' => 'Use format like 8.1, 8.2, 8.3, or 8.4'
             ];
+            return;
         }
 
-        $supportedVersions = ['8.1', '8.2', '8.3'];
-        $majorVersion = explode('.', $version)[0] . '.' . explode('.', $version)[1];
+        $supportedVersions = ['8.1', '8.2', '8.3', '8.4'];
+        $parts = explode('.', $normalizedVersion);
+        $majorVersion = $parts[0] . '.' . ($parts[1] ?? '0');
         
         if (!in_array($majorVersion, $supportedVersions)) {
             self::$warnings[] = [
@@ -197,12 +200,12 @@ class ConfigurationValidationService
             ];
         }
 
-        if (!preg_match('/^[a-z_][a-z0-9]*$/', $user)) {
+        if (!preg_match('/^[a-z_][a-z0-9_-]*$/', $user)) {
             self::$errors[] = [
                 'field' => $field,
                 'message' => "Invalid user format: {$user}",
                 'type' => 'format',
-                'suggestion' => 'Use lowercase alphanumeric with underscores only'
+                'suggestion' => 'Use lowercase alphanumeric with underscores or hyphens'
             ];
         }
     }
@@ -282,7 +285,7 @@ class ConfigurationValidationService
 
     private static function isValidDomain(string $domain): bool
     {
-        return (bool)preg_match('/^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/', $domain);
+        return filter_var($domain, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) !== false;
     }
 
     private static function getValidationSummary(): string
@@ -300,7 +303,7 @@ class ConfigurationValidationService
             $summary .= "❌ {$errorCount} error(s) found\n";
             foreach (self::$errors as $error) {
                 $summary .= "  - {$error['field']}: {$error['message']}\n";
-                if ($error['suggestion']) {
+                if (!empty($error['suggestion'])) {
                     $summary .= "    💡 {$error['suggestion']}\n";
                 }
             }
@@ -310,13 +313,13 @@ class ConfigurationValidationService
             $summary .= "⚠️ {$warningCount} warning(s) found\n";
             foreach (self::$warnings as $warning) {
                 $summary .= "  - {$warning['field']}: {$warning['message']}\n";
-                if ($warning['suggestion']) {
+                if (!empty($warning['suggestion'])) {
                     $summary .= "    💡 {$warning['suggestion']}\n";
                 }
             }
         }
 
-        if ($errorCount === 0 && $warningCount > 0) {
+        if ($errorCount === 0) {
             $summary .= "✅ Configuration is valid with {$warningCount} warning(s)\n";
         }
 

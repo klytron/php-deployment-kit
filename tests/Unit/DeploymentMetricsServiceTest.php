@@ -123,9 +123,10 @@ class DeploymentMetricsServiceTest extends TestCase
     public function testFormatBytes(): void
     {
         $this->assertEquals('0 B', DeploymentMetricsService::formatBytes(0));
-        $this->assertEquals('1024 B', DeploymentMetricsService::formatBytes(1024));
-        $this->assertEquals('1.00 KB', DeploymentMetricsService::formatBytes(1024));
-        $this->assertEquals('1.00 MB', DeploymentMetricsService::formatBytes(1024 * 1024));
-        $this->assertEquals('1.00 GB', DeploymentMetricsService::formatBytes(1024 * 1024 * 1024));
+        $this->assertEquals('500 B', DeploymentMetricsService::formatBytes(500));
+        $this->assertEquals('1 KB', DeploymentMetricsService::formatBytes(1024));
+        $this->assertEquals('1.5 KB', DeploymentMetricsService::formatBytes(1536));
+        $this->assertEquals('1 MB', DeploymentMetricsService::formatBytes(1024 * 1024));
+        $this->assertEquals('1 GB', DeploymentMetricsService::formatBytes(1024 * 1024 * 1024));
     }
 }

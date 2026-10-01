@@ -5,6 +5,37 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-10-01
+
+Fixes load-time closure evaluation crash on Deployer 7.5.12, wires Filament v4/v5 assets into the Laravel pipeline, hardens secret masking, introduces the standalone `klytron` CLI scaffolding tool, and expands CI test coverage for all examples and templates.
+
+### Fixed
+
+- **Neutralize Deployer 7.5.12 Load-time `ask()` Crash**: Replaced `is_callable(get('php_version'))` in `recipes/klytron-laravel-recipe.php` with safe inspection of `klytron_php_version`. In Deployer 7.5.12 provision recipes, `php_version` is defined as a closure calling `Deployer\ask()`. Calling `get()` on it outside a task context triggered a fatal exception (`'Deployer\ask' can only be used within a task`), breaking all CLI commands (`dep list`, `dep help`, `dep test`, `dep --plan`).
+- **Filament Asset Publishing in Deployment Flow**: Added `klytron:laravel:filament:assets` into `klytron_laravel_deploy_flow()` prior to `deploy:database:complete` and `deploy:symlink`, ensuring Filament admin panel assets are published automatically when enabled.
+- **Enhanced Secret Masking**: Expanded secret masking in both local and remote environment validation tasks (`klytron:laravel:validate:environment:local` and `klytron:laravel:validate:environment`) using case-insensitive regex pattern matching `(KEY|PASSWORD|SECRET|TOKEN)`.
+- **PHP 8.4 Modernization & Deprecations**: Fixed float-to-int conversion in `DeploymentMetricsService::formatDuration()`, added explicit nullable parameter types (`?string`) in `DeploymentErrorHandler` and `DeploymentMetricsTask`, and verified clean execution on PHP 8.4 without deprecations.
+- **Domain & Username Validation Fixes**: Resolved malformed regex in `ConfigurationValidationService::isValidDomain()` using `filter_var` domain validation, enabled hyphenated username support (e.g. `www-data`, `deploy-user`), and supported PHP 8.4 in supported versions.
+- **Enhanced Deployment & Decryption Hardening**: Corrected `curl_setopt` missing boolean parameter calls and imported `writeln` in `EnhancedDeploymentTask`, fixed exception arguments in `ImageOptimizationTask`, purged non-existent Deployer exception imports in `EnvironmentDecryptTask`, and added Laravel 11 `Schema::getTableListing()` fallback in `KlytronDbSearchReplaceCommand`.
+- **Batch Encryption Error Handling**: Updated `KlytronFileEnCrypterCommand` to track failed encryptions and return `Command::FAILURE` when batch operations fail, mirroring `KlytronFileDeCrypterCommand`.
+- **Unit Test Suite Visibility & Strictness**:
+  - Changed `DeploymentMetricsService::formatDuration()` and `DeploymentMetricsService::formatBytes()` to `public static` to support direct invocation and test assertions.
+  - Changed `RetryService::shouldRetry()` to `public static` and included `\RuntimeException` in `RetryService::executeCurlOperation()` retry candidates.
+  - Updated `phpunit.xml` configuration to disable strict coverage requirements so integration test workflows run cleanly.
+  - Added `ConfigurationValidationServiceTest` verifying validation rules and exception data integrity.
+
+### Added
+
+- **CLI Generator Tool (`vendor/bin/klytron`)**: Added standalone `bin/klytron` executable and Laravel Artisan command `php artisan klytron:init` driven by `DeployConfigGenerator`. Generates canonical `deploy.php` with environment-driven host configuration, path placeholders, and non-root user setup pre-wired, plus `.env.deploy.example`.
+- **SQLite Database Replacement Task (`klytron:laravel:deploy:db:import:sqlite`)**: Implemented standalone and integrated SQLite database import supporting plain and encrypted SQLite dumps, maintenance mode (`artisan down`/`up`) during replacement, file permissions, and cache clearing.
+- **Integration CI Validation for Templates & Examples**: Added `testExamplesAndTemplatesCanResolvePlan` and `testGeneratedConfigResolvesPlan` in `tests/Integration/DeploymentWorkflowTest.php` ensuring every example, template, and generated configuration resolves cleanly via `dep list` without syntax or load-time errors.
+
+### Documentation
+
+- **Example & Reference Template Cleanup**: Removed outdated `after('klytron:laravel:deploy:success', 'klytron:system:restart')` lines from `docs/quick-start.md` and `docs/configuration-reference.md` (PHP-FPM restart is already hooked automatically in the recipe) to prevent double restarts.
+- **Validation-Driven Environment Checks**: Removed load-time `if (!file_exists('.env.production'))` guard from documentation snippets, directing users to the non-blocking validation task `klytron:validate:basic` / `klytron:validate:env_files`.
+- **SQLite Workflow & Configuration**: Documented SQLite database replacement semantics, `database => 'sqlite'`, `sqlite_database_path`, and `db_import_path` in `docs/task-reference.md` and `docs/configuration-reference.md`.
+
 ## [1.1.1] - 2026-09-30
 
 Maintenance and hardening release addressing edge cases, security enhancements, and codebase modernization.

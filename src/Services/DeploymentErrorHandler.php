@@ -18,7 +18,7 @@ class DeploymentErrorHandler
     protected array $warnings = [];
     protected string $logFile;
 
-    public function __construct(string $logFile = null)
+    public function __construct(?string $logFile = null)
     {
         $this->logFile = $logFile ?? sys_get_temp_dir() . '/deployment_errors.log';
     }
@@ -226,7 +226,7 @@ class DeploymentErrorHandler
                 "%s:%d %s%s",
                 $entry['file'] ?? 'unknown',
                 $entry['line'] ?? 0,
-                $entry['function'] ?? 'unknown',
+                $entry['function'],
                 isset($entry['class']) ? '::' : ''
             );
         }

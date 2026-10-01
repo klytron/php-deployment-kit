@@ -140,10 +140,11 @@ class DeploymentMetricsService
         return $summary;
     }
 
-    private static function formatDuration(float $seconds): string
+    public static function formatDuration(float $seconds): string
     {
-        $minutes = floor($seconds / 60);
-        $remainingSeconds = $seconds % 60;
+        $totalSeconds = (int) round($seconds);
+        $minutes = (int) floor($totalSeconds / 60);
+        $remainingSeconds = $totalSeconds % 60;
         
         if ($minutes > 0) {
             return "{$minutes}m {$remainingSeconds}s";
@@ -152,7 +153,7 @@ class DeploymentMetricsService
         return "{$remainingSeconds}s";
     }
 
-    private static function formatBytes(int $bytes): string
+    public static function formatBytes(int $bytes): string
     {
         $units = ['B', 'KB', 'MB', 'GB'];
         $bytes = max($bytes, 0);

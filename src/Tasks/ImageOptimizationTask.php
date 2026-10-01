@@ -13,6 +13,7 @@ use function Deployer\set;
 
 use Klytron\PhpDeploymentKit\Services\RetryService;
 use Klytron\PhpDeploymentKit\Services\DeploymentMetricsService;
+use Klytron\PhpDeploymentKit\Exceptions\DeploymentException;
 
 /**
  * Image Optimization Task
@@ -96,10 +97,12 @@ class ImageOptimizationTask
         } catch (Exception $e) {
             DeploymentMetricsService::recordTaskResult('image_optimization', false, DeploymentMetricsService::endTimer('image_optimization'), $e->getMessage());
             error("❌ Image optimization failed: " . $e->getMessage());
-            throw new \Exception(
+            throw new DeploymentException(
                 "Image optimization failed: " . $e->getMessage(),
                 ['original_error' => $e->getMessage(), 'trace' => $e->getTraceAsString()],
-                "Check image optimization command and permissions"
+                "Check image optimization command and permissions",
+                0,
+                $e
             );
         }
     }
