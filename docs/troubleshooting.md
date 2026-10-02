@@ -543,7 +543,7 @@ klytron_configure_environment([
 
 4. **Sequential `sudo` Subshell Explosion**:
    - *Previous cause*: Permissions commands using `find ... -exec sudo chmod g+s {} \;`. Spawning an independent `sudo` process for every directory (3,000–5,000 dirs in `vendor/`) takes 5+ minutes alone.
-   - *Fix*: `klytron:deploy:access_permissions` batches directory updates with `find ... -exec sudo chmod g+s,0755 {} +` and scopes sweeps strictly to `{{release_or_current_path}}` and `shared/storage`.
+   - *Fix*: `klytron:deploy:access_permissions` batches directory updates with `find ... -exec sudo chmod 2755 {} +` (octal including setgid; do not use `g+s,0755` — GNU chmod rejects mixed symbolic+octal) and scopes sweeps strictly to `{{release_or_current_path}}` and `shared/storage`.
 
 5. **Pruning Unnecessary Tasks**:
    - Remove database migration tasks if your project has `'database' => 'none'`.

@@ -5,6 +5,12 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2026-10-02
+
+### Fixed
+
+- **`klytron:deploy:access_permissions` invalid chmod mode**: Replaced `chmod g+s,755` (rejected by GNU chmod: cannot mix symbolic `g+s` with octal `755`) with a single setgid octal mode (`dirPerms | 02000`, e.g. `2755`). Restores successful deploys after the v1.1.x batched-permissions optimisation.
+
 ## [1.1.3] - 2026-10-01
 
 Task-graph resolution in `klytron:plan`, non-root `deployer` defaults with comprehensive sudoers documentation, SSH stdout secret suppression, GitHub Actions CI workflow, and standalone `test/consumer-plan.php` CI runner.
@@ -87,7 +93,7 @@ Major release introducing ultra-fast deployment optimizations (reducing release 
 **Performance & Acceleration**
 - `klytron:cache:vendor` task: reuses `vendor/` from the previous release via hardlinks (`cp -al`), reducing Composer install time from minutes to ~2 seconds.
 - `node_modules` hardlink caching in `klytron:laravel:node:vite:build`: compares `package-lock.json` and skips remote `npm install` when node dependencies have not changed.
-- Batched directory permissions in `klytron:deploy:access_permissions`: replaces sequential `find ... -exec sudo chmod g+s {} \;` with batched `find ... -exec sudo chmod g+s,0755 {} +` and scopes permission sweeps strictly to the active release and shared storage.
+- Batched directory permissions in `klytron:deploy:access_permissions`: replaces sequential `find ... -exec sudo chmod g+s {} \;` with batched `find ... -exec sudo chmod 2755 {} +` (setgid octal; corrected in 1.1.4 after an invalid `g+s,0755` form) and scopes permission sweeps strictly to the active release and shared storage.
 - Non-destructive git repo handling: `klytron:deploy:fix_repo` preserves `.dep/repo` cache; added `klytron:deploy:clean_repo` for explicit repo cache purge.
 
 **Filament v5 Support**

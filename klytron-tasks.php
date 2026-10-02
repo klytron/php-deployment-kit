@@ -532,7 +532,6 @@ task('klytron:deploy:access_permissions', function () {
     $filePerms = get('default_file_permissions', 0644);
     $dirPerms = get('default_dir_permissions', 0755);
     $filePermsOct = decoct($filePerms);
-    $dirPermsOct = decoct($dirPerms);
 
     // Add web server user to the http_group if different
     if ($httpGroup !== $webServerUser) {
@@ -557,8 +556,10 @@ task('klytron:deploy:access_permissions', function () {
         run("sudo chown -R $httpUser:$httpGroup '$publicHtml'");
     }
 
-    // Batch chmod for directories with setgid bit using {} + (batches hundreds of files per sudo call instead of slow individual forks)
-    run('find {{release_or_current_path}} -type d -exec sudo chmod g+s,' . $dirPermsOct . ' {} +');
+    // Batch chmod for directories with setgid bit using {} + (batches hundreds of files per sudo call instead of slow individual forks).
+    // GNU chmod rejects mixing symbolic and octal in one mode (e.g. g+s,755). Use a single octal with setgid: 0755|02000 → 2755.
+    $dirPermsWithSetgidOct = decoct($dirPerms | 02000);
+    run('find {{release_or_current_path}} -type d -exec sudo chmod ' . $dirPermsWithSetgidOct . ' {} +');
     run('find {{release_or_current_path}} -type f -exec sudo chmod ' . $filePermsOct . ' {} +');
 
     // Handle .htaccess if present in public directory
