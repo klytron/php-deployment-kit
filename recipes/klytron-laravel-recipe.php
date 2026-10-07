@@ -1412,43 +1412,54 @@ task('klytron:laravel:deploy:cache:clear:all', function () {
 
 task('klytron:deploy:laravel:access_permissions', function () {
     info("🔐 Setting laravel file permissions and ownership...");
-    
+
     $httpUser = get('http_user', 'www-data');
     $httpGroup = get('http_group', 'www-data');
-    
-    // Handle storage directory (usually a symlink to shared storage)
-    $storagePath = '{{release_or_current_path}}/storage';
-    if (test("[ -L $storagePath ]")) {
-        $realStoragePath = run("readlink -f $storagePath");
-        if (!empty($realStoragePath)) {
-            run("sudo chmod -R 775 $realStoragePath");
-            run("sudo chown -R $httpUser:$httpGroup $realStoragePath");
-            info("✅ Set permissions for storage directory at $realStoragePath");
-        }
-    } else {
-        run("sudo chmod -R 775 $storagePath");
-        run("sudo chown -R $httpUser:$httpGroup $storagePath");
-    }
-    
-    // Handle bootstrap/cache directory
-    $bootstrapCachePath = '{{release_or_current_path}}/bootstrap/cache';
-    if (test("[ -L $bootstrapCachePath ]")) {
-        $realBootstrapPath = run("readlink -f $bootstrapCachePath");
-        if (!empty($realBootstrapPath)) {
-            run("sudo chmod -R 775 $realBootstrapPath");
-            run("sudo chown -R $httpUser:$httpGroup $realBootstrapPath");
-            info("✅ Set permissions for bootstrap/cache at $realBootstrapPath");
-        }
-    } else {
-        run("sudo chmod -R 775 $bootstrapCachePath");
-        run("sudo chown -R $httpUser:$httpGroup $bootstrapCachePath");
-    }
-    
-    // Ensure the .env file has correct permissions
-    if (test("[ -f {{release_or_current_path}}/.env ]")) {
-        run("sudo chmod 640 {{release_or_current_path}}/.env");
-        run("sudo chown $httpUser:$httpGroup {{release_or_current_path}}/.env");
-    }
+    $storageMode = decoct(get('laravel_storage_permissions', 0775));
+    $cacheMode = decoct(get('laravel_cache_permissions', 0775));
+
+    // Single remote script with timeouts — avoids multi-SSH hangs after shared/storage.
+    run(<<<BASH
+set -euo pipefail
+RELEASE='{{release_or_current_path}}'
+HTTP_USER='{$httpUser}'
+HTTP_GROUP='{$httpGroup}'
+STORAGE_MODE='{$storageMode}'
+CACHE_MODE='{$cacheMode}'
+
+fix_tree() {
+  local label="\$1"
+  local path="\$2"
+  local mode="\$3"
+  if [ ! -e "\$path" ]; then
+    echo "→ skip \$label (missing): \$path"
+    return 0
+  fi
+  local target="\$path"
+  if [ -L "\$path" ]; then
+    target="\$(readlink -f "\$path" || true)"
+    if [ -z "\$target" ] || [ ! -e "\$target" ]; then
+      echo "→ skip \$label (broken symlink): \$path"
+      return 0
+    fi
+  fi
+  echo "→ \$label: \$target"
+  sudo timeout 90 chmod -R "\$mode" "\$target" || true
+  sudo timeout 90 chown -R "\$HTTP_USER:\$HTTP_GROUP" "\$target" || true
+}
+
+fix_tree storage "\$RELEASE/storage" "\$STORAGE_MODE"
+fix_tree bootstrap/cache "\$RELEASE/bootstrap/cache" "\$CACHE_MODE"
+
+if [ -f "\$RELEASE/.env" ]; then
+  echo "→ .env"
+  sudo chmod 640 "\$RELEASE/.env" || true
+  sudo chown "\$HTTP_USER:\$HTTP_GROUP" "\$RELEASE/.env" || true
+fi
+
+echo "→ laravel access_permissions done"
+BASH
+    );
 
     info("✅ Laravel-specific file permissions and ownership set successfully");
 })->desc('Set proper laravel file permissions and ownership');

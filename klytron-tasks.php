@@ -490,19 +490,99 @@ task('klytron:deploy:info', function () {
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
- * Reload PHP-FPM service (graceful reload to clear OPcache)
+ * Reload PHP-FPM / clear OPcache after deployment.
+ *
+ * Covers both:
+ *  - systemd php-fpm pools (`systemctl reload phpX.Y-fpm`)
+ *  - Virtualmin / php-cgi FCGI wrappers (domain `fcgi-bin/phpX.Y.fcgi`), which keep a
+ *    separate OPcache that systemctl reload does NOT touch
  */
 task('klytron:fpm:reload', function () {
     $phpVersion = get('php_version', '8.3');
-    info("🔄 Reloading PHP-FPM (php{$phpVersion}-fpm)...");
+    // Normalise "php8.4" → "8.4"
+    $phpVersion = preg_replace('/^php/i', '', (string) $phpVersion);
+    info("🔄 Reloading PHP runtime / OPcache (php{$phpVersion})...");
+
     try {
         run("sudo systemctl reload php{$phpVersion}-fpm 2>/dev/null || sudo systemctl reload php-fpm 2>/dev/null || sudo service php{$phpVersion}-fpm reload 2>/dev/null || true");
-        info("✅ PHP-FPM reloaded successfully");
+        info("✅ PHP-FPM reload attempted (systemd)");
     } catch (\Throwable $e) {
         warning("⚠️ Could not reload PHP-FPM service: " . $e->getMessage());
     }
-})->desc('Reload PHP-FPM to refresh OPcache after deployment');
 
+    // Always try SAPI-level OPcache reset for Virtualmin php-cgi / edge cases
+    invoke('klytron:opcache:reset');
+})->desc('Reload PHP-FPM and reset OPcache (incl. Virtualmin php-cgi)');
+
+/**
+ * Reset OPcache via the live site SAPI (works for Virtualmin FCGI php-cgi).
+ * Drops a one-shot script under public/, hits it over HTTP(S), then deletes it.
+ */
+task('klytron:opcache:reset', function () {
+    if (get('skip_opcache_reset', false)) {
+        info("⏭️ OPcache reset skipped (skip_opcache_reset=true)");
+        return;
+    }
+
+    if (!test('[ -d {{release_or_current_path}}/public ]')) {
+        warning("⚠️ No public/ directory found — skipping OPcache reset");
+        return;
+    }
+
+    $token = bin2hex(random_bytes(16));
+    $scriptName = '_klytron_opcache_reset_' . substr($token, 0, 12) . '.php';
+    $phpVersion = preg_replace('/^php/i', '', (string) get('php_version', '8.3'));
+    $domain = (string) get('domain', get('application_domain', ''));
+
+    info("🧹 Resetting OPcache via site SAPI...");
+
+    // Upload a token-gated one-shot reset script (avoid nested-heredoc quoting pitfalls)
+    $phpBody = "<?php\nheader('Content-Type: text/plain');\n"
+        . "if (!isset(\$_GET['t']) || !hash_equals('{$token}', (string) \$_GET['t'])) {"
+        . " http_response_code(403); echo 'forbidden'; exit; }\n"
+        . "\$ok = function_exists('opcache_reset') ? opcache_reset() : false;\n"
+        . "echo \$ok ? 'opcache_reset=1' : 'opcache_reset=0';\n";
+
+    $b64 = base64_encode($phpBody);
+    run("echo {$b64} | base64 -d > {{release_or_current_path}}/public/{$scriptName} && chmod 644 {{release_or_current_path}}/public/{$scriptName}");
+
+    $resetOk = false;
+    $curlAttempts = [];
+    if ($domain !== '') {
+        $curlAttempts[] = "curl -fsS -m 15 --resolve " . escapeshellarg("{$domain}:443:127.0.0.1") . " "
+            . escapeshellarg("https://{$domain}/{$scriptName}?t={$token}");
+        $curlAttempts[] = "curl -fsS -m 15 --resolve " . escapeshellarg("{$domain}:80:127.0.0.1") . " "
+            . escapeshellarg("http://{$domain}/{$scriptName}?t={$token}");
+        $curlAttempts[] = "curl -fsS -m 15 -H " . escapeshellarg("Host: {$domain}") . " "
+            . escapeshellarg("http://127.0.0.1/{$scriptName}?t={$token}");
+    }
+
+    foreach ($curlAttempts as $cmd) {
+        try {
+            $result = run("{$cmd} 2>/dev/null || true");
+            if (is_string($result) && str_contains($result, 'opcache_reset=')) {
+                info('✅ OPcache reset response: ' . trim($result));
+                $resetOk = true;
+                break;
+            }
+        } catch (\Throwable $e) {
+            // try next
+        }
+    }
+
+    if (!$resetOk) {
+        info("ℹ️ HTTP OPcache reset inconclusive — recycling php-cgi{$phpVersion} workers if present");
+        run("sudo pkill -f " . escapeshellarg("php-cgi{$phpVersion}") . " 2>/dev/null || true");
+    }
+
+    run("rm -f {{release_or_current_path}}/public/{$scriptName} 2>/dev/null || true");
+    $publicHtml = get('application_public_html', '');
+    if (!empty($publicHtml)) {
+        run('rm -f ' . escapeshellarg(rtrim((string) $publicHtml, '/') . '/' . $scriptName) . ' 2>/dev/null || true');
+    }
+
+    info('✅ OPcache reset step finished');
+})->desc('Reset OPcache via site SAPI (Virtualmin FCGI safe)');
 task('klytron:system:restart', function () {
     static $alreadyExecuted = false;
     if ($alreadyExecuted) {
@@ -523,68 +603,86 @@ task('klytron:system:restart', function () {
 task('klytron:deploy:access_permissions', function () {
     info("🔐 Setting file permissions and ownership on current release...");
 
-    // Get user and group from configuration
     $httpUser = get('http_user', 'www-data');
     $httpGroup = get('http_group', 'www-data');
     $webServerUser = $httpUser;
-    
-    // Get default permissions from configuration
+
     $filePerms = get('default_file_permissions', 0644);
     $dirPerms = get('default_dir_permissions', 0755);
     $filePermsOct = decoct($filePerms);
+    $dirPermsWithSetgidOct = decoct($dirPerms | 02000);
 
-    // Add web server user to the http_group if different
     if ($httpGroup !== $webServerUser) {
         run("sudo usermod -a -G $httpGroup $webServerUser 2>/dev/null || true");
     }
 
-    // Set ownership only on release path (fast, avoids crawling all historical releases and backup tarballs)
-    run("sudo chown -R $httpUser:$httpGroup {{release_or_current_path}}");
-
-    // Ensure shared storage and cache directories are owned by web user
+    // One remote script: exclude node_modules/.git from recursive chown/chmod (major hang source).
+    // vendor/ is included (required for PHP), node_modules is build-only and huge.
     $sharedPath = get('deploy_path') . '/shared';
-    if (test("[ -d '$sharedPath/storage' ]")) {
-        run("sudo chown -R $httpUser:$httpGroup '$sharedPath/storage' 2>/dev/null || true");
-    }
-    if (test("[ -d '$sharedPath/bootstrap/cache' ]")) {
-        run("sudo chown -R $httpUser:$httpGroup '$sharedPath/bootstrap/cache' 2>/dev/null || true");
-    }
+    $publicHtml = get('application_public_html', '');
+    $projectType = get('project_type', '');
+    $storagePerms = decoct(get('laravel_storage_permissions', 0775));
+    $cachePerms = decoct(get('laravel_cache_permissions', 0775));
 
-    // Set ownership for public HTML if configured
-    $publicHtml = get('application_public_html');
-    if (!empty($publicHtml) && test("[ -d '$publicHtml' ]")) {
-        run("sudo chown -R $httpUser:$httpGroup '$publicHtml'");
-    }
+    $publicHtmlExport = !empty($publicHtml) ? escapeshellarg($publicHtml) : "''";
 
-    // Batch chmod for directories with setgid bit using {} + (batches hundreds of files per sudo call instead of slow individual forks).
-    // GNU chmod rejects mixing symbolic and octal in one mode (e.g. g+s,755). Use a single octal with setgid: 0755|02000 → 2755.
-    $dirPermsWithSetgidOct = decoct($dirPerms | 02000);
-    run('find {{release_or_current_path}} -type d -exec sudo chmod ' . $dirPermsWithSetgidOct . ' {} +');
-    run('find {{release_or_current_path}} -type f -exec sudo chmod ' . $filePermsOct . ' {} +');
+    run(<<<BASH
+set -eu
+RELEASE='{{release_or_current_path}}'
+HTTP_USER='{$httpUser}'
+HTTP_GROUP='{$httpGroup}'
+DIR_MODE='{$dirPermsWithSetgidOct}'
+FILE_MODE='{$filePermsOct}'
+SHARED='{$sharedPath}'
+PUBLIC_HTML={$publicHtmlExport}
+PROJECT_TYPE='{$projectType}'
+STORAGE_MODE='{$storagePerms}'
+CACHE_MODE='{$cachePerms}'
 
-    // Handle .htaccess if present in public directory
-    $htaccessPath = '{{release_or_current_path}}/public/.htaccess';
-    if (test("[ -f '$htaccessPath' ]")) {
-        run("sudo chmod $filePermsOct '$htaccessPath'");
-        run("sudo chown $httpUser:$httpGroup '$htaccessPath'");
-    }
+echo "→ chown release (excluding node_modules/.git)..."
+sudo find "\$RELEASE" \\( -name node_modules -o -name .git -o -name .npm-cache \\) -prune -o \\( -type d -o -type f -o -type l \\) -exec chown "\$HTTP_USER:\$HTTP_GROUP" {} +
 
-    // Special handling for storage and bootstrap/cache in Laravel
-    if (get('project_type', '') === 'laravel') {
-        $storagePerms = get('laravel_storage_permissions', 0775);
-        $cachePerms = get('laravel_cache_permissions', 0775);
-        
-        if (test("[ -d '{{release_or_current_path}}/storage' ]")) {
-            run('chmod -R ' . $storagePerms . ' {{release_or_current_path}}/storage 2>/dev/null || true');
-        }
-        if (test("[ -d '{{release_or_current_path}}/bootstrap/cache' ]")) {
-            run('chmod -R ' . $cachePerms . ' {{release_or_current_path}}/bootstrap/cache 2>/dev/null || true');
-        }
-    }
+if [ -d "\$SHARED/storage" ]; then
+  echo "→ chown shared/storage..."
+  sudo timeout 120 chown -R "\$HTTP_USER:\$HTTP_GROUP" "\$SHARED/storage" || true
+fi
+if [ -d "\$SHARED/bootstrap/cache" ]; then
+  echo "→ chown shared/bootstrap/cache..."
+  sudo timeout 120 chown -R "\$HTTP_USER:\$HTTP_GROUP" "\$SHARED/bootstrap/cache" || true
+fi
+
+# public_html is usually a symlink — only chown the symlink inode, not the whole tree again
+if [ -n "\$PUBLIC_HTML" ] && [ -e "\$PUBLIC_HTML" ]; then
+  echo "→ chown public_html inode..."
+  sudo chown -h "\$HTTP_USER:\$HTTP_GROUP" "\$PUBLIC_HTML" 2>/dev/null || sudo chown "\$HTTP_USER:\$HTTP_GROUP" "\$PUBLIC_HTML" || true
+fi
+
+echo "→ chmod dirs/files (excluding node_modules/.git)..."
+sudo find "\$RELEASE" \\( -name node_modules -o -name .git -o -name .npm-cache \\) -prune -o -type d -exec chmod "\$DIR_MODE" {} +
+sudo find "\$RELEASE" \\( -name node_modules -o -name .git -o -name .npm-cache \\) -prune -o -type f -exec chmod "\$FILE_MODE" {} +
+
+if [ -f "\$RELEASE/public/.htaccess" ]; then
+  sudo chmod "\$FILE_MODE" "\$RELEASE/public/.htaccess"
+  sudo chown "\$HTTP_USER:\$HTTP_GROUP" "\$RELEASE/public/.htaccess"
+fi
+
+if [ "\$PROJECT_TYPE" = "laravel" ]; then
+  if [ -e "\$RELEASE/storage" ]; then
+    echo "→ chmod Laravel storage..."
+    sudo timeout 120 chmod -R "\$STORAGE_MODE" "\$RELEASE/storage" 2>/dev/null || true
+  fi
+  if [ -e "\$RELEASE/bootstrap/cache" ]; then
+    echo "→ chmod Laravel bootstrap/cache..."
+    sudo timeout 120 chmod -R "\$CACHE_MODE" "\$RELEASE/bootstrap/cache" 2>/dev/null || true
+  fi
+fi
+
+echo "→ access_permissions done"
+BASH
+    );
 
     info("✅ File permissions and ownership set successfully");
 });
-
 
 task('klytron:deploy:create:server_symlink', function () {
     info("🔗 Setting up web server symlink for domain...");

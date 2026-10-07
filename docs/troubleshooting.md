@@ -541,11 +541,15 @@ klytron_configure_environment([
    - *Previous cause*: Every release ran `npm install` on the remote server across hundreds of megabytes of node modules.
    - *Fix*: `klytron:laravel:node:vite:build` reuses `node_modules` from the previous release via hardlinks and hashes `package-lock.json`. If unchanged, it skips `npm install` completely and runs Vite directly.
 
-4. **Sequential `sudo` Subshell Explosion**:
-   - *Previous cause*: Permissions commands using `find ... -exec sudo chmod g+s {} \;`. Spawning an independent `sudo` process for every directory (3,000–5,000 dirs in `vendor/`) takes 5+ minutes alone.
-   - *Fix*: `klytron:deploy:access_permissions` batches directory updates with `find ... -exec sudo chmod 2755 {} +` (octal including setgid; do not use `g+s,0755` — GNU chmod rejects mixed symbolic+octal) and scopes sweeps strictly to `{{release_or_current_path}}` and `shared/storage`.
+4. **Sequential `sudo` Subshell Explosion / permissions hang**:
+   - *Previous cause*: Permissions commands using `find ... -exec sudo chmod g+s {} \;`, or recursive chown across `node_modules`, or multi-SSH Laravel storage/cache steps that stall and leave `deploy.lock`.
+   - *Fix (v1.1.5)*: `klytron:deploy:access_permissions` batches updates with setgid octal modes, **prunes `node_modules`/`.git`/`.npm-cache`**, and runs as one remote script. `klytron:deploy:laravel:access_permissions` uses timeouts and a single SSH round-trip.
 
-5. **Pruning Unnecessary Tasks**:
+5. **Stale CSS/JS hashes after deploy (Virtualmin)**:
+   - *Cause*: `systemctl reload php-fpm` does not clear OPcache for Virtualmin `php-cgi` FCGI workers.
+   - *Fix (v1.1.5)*: `klytron:fpm:reload` also runs `klytron:opcache:reset` against the live domain SAPI.
+
+6. **Pruning Unnecessary Tasks**:
    - Remove database migration tasks if your project has `'database' => 'none'`.
    - Remove sitemap or image optimization tasks if your project does not generate them.
 

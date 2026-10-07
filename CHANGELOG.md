@@ -5,6 +5,19 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5] - 2026-10-07
+
+### Fixed
+
+- **`klytron:deploy:laravel:access_permissions` hang**: Replaced multi-SSH `chmod`/`chown` chains with a single remote script, `timeout` guards, and broken-symlink skips. Prevents deploys from stalling after shared storage (leaving `deploy.lock` and skipping unlock/cleanup/FPM reload).
+- **Broken stub in `recipes/laravel.php`**: Removed invalid `chown -R $user:{{path}}/storage` override that could replace the real Laravel permissions task.
+- **Heavy `access_permissions` sweeps**: Exclude `node_modules`, `.git`, and `.npm-cache` from recursive `find` chown/chmod; chown `public_html` symlink inode only (`chown -h`) instead of re-walking the release tree.
+
+### Added
+
+- **`klytron:opcache:reset`**: Token-gated one-shot public script + curl against the live domain (and localhost `Host` header) so **Virtualmin php-cgi FCGI** OPcache is cleared. Falls back to recycling `php-cgi{X.Y}` workers when HTTP reset is inconclusive.
+- **`klytron:fpm:reload` enhancement**: Still reloads systemd php-fpm, then always invokes `klytron:opcache:reset` (disable with `set('skip_opcache_reset', true)`).
+
 ## [1.1.4] - 2026-10-02
 
 ### Fixed

@@ -914,7 +914,11 @@ Composite validation task that executes `klytron:validate:deploy_path_parent`, `
 
 ### `klytron:fpm:reload`
 
-Gracefully reloads the PHP-FPM service (e.g. `systemctl reload php8.3-fpm`), clearing opcache without dropping active connections.
+Reloads the PHP-FPM service (e.g. `systemctl reload php8.3-fpm`) and then runs `klytron:opcache:reset`.
+
+### `klytron:opcache:reset`
+
+Clears OPcache through the **live site SAPI** (required on Virtualmin hosts that use `fcgi-bin/phpX.Y.fcgi` / `php-cgi`, where systemd php-fpm reload does not touch the running CGI workers). Writes a short-lived token-gated script under `public/`, curls the domain (and localhost with `Host`), then deletes the script. Set `skip_opcache_reset` to `true` to disable.
 
 ### `klytron:deploy:clean_repo`
 

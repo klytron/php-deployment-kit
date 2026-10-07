@@ -90,11 +90,6 @@ task('klytron:laravel:deploy', function () {
     }
 })->desc('Complete Laravel deployment tasks');
 
-task('klytron:deploy:laravel:access_permissions', function () {
-    $httpUser = get('http_user', 'www-data');
-    
-    run('chmod -R 0775 {{current_path}}/storage');
-    run('chmod -R 0775 {{current_path}}/bootstrap/cache');
-    run("chown -R $httpUser:{{current_path}}/storage");
-    run("chown -R $httpUser:{{current_path}}/bootstrap/cache");
-})->desc('Set Laravel-specific permissions');
+// Intentionally not redefining klytron:deploy:laravel:access_permissions here.
+// The authoritative implementation lives in klytron-laravel-recipe.php.
+// (Previous stub used invalid `chown user:{{path}}` syntax and could override the real task.)
