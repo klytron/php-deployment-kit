@@ -5,6 +5,12 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6] - 2026-10-07
+
+### Fixed
+
+- **`vite: Permission denied` (exit 126) after node_modules hardlink reuse**: Restore execute bits on `node_modules/.bin` (and vite entrypoints) before `npm run build`. Hardlink/`cp -al` reuse plus umask could leave shims non-executable.
+
 ## [1.1.5] - 2026-10-07
 
 ### Fixed

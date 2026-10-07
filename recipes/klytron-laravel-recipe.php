@@ -720,6 +720,12 @@ task('klytron:laravel:node:vite:build', function () {
         run("cp -al '{{deploy_path}}/current/node_modules' '{{release_path}}/node_modules' 2>/dev/null || cp -R '{{deploy_path}}/current/node_modules' '{{release_path}}/node_modules'");
     }
 
+    // Hardlink reuse / umask can drop +x on .bin shims (vite: Permission denied / exit 126)
+    if (test("[ -d '{{release_path}}/node_modules/.bin' ]")) {
+        run("chmod -R a+x '{{release_path}}/node_modules/.bin' 2>/dev/null || true");
+        run("find '{{release_path}}/node_modules' -type f \\( -name vite -o -path '*/vite/bin/vite.js' \\) -exec chmod a+x {} + 2>/dev/null || true");
+    }
+
     // Check if package-lock.json changed between releases
     $lockUnchanged = false;
     if (test("[ -f '{{deploy_path}}/current/package-lock.json' ]") && test("[ -f '{{release_path}}/package-lock.json' ]")) {
