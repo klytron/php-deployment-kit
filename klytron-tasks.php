@@ -532,7 +532,11 @@ task('klytron:opcache:reset', function () {
     $token = bin2hex(random_bytes(16));
     $scriptName = '_klytron_opcache_reset_' . substr($token, 0, 12) . '.php';
     $phpVersion = preg_replace('/^php/i', '', (string) get('php_version', '8.3'));
-    $domain = (string) get('domain', get('application_domain', ''));
+    // Never call get('domain') — Deployer provision defines it as ask() and will hang non-interactive deploys.
+    $domain = (string) get('application_public_domain', get('application_domain', ''));
+    if ($domain === '' && preg_match('#https?://([^/]+)#', (string) get('application_public_url', ''), $m)) {
+        $domain = $m[1];
+    }
 
     info("🧹 Resetting OPcache via site SAPI...");
 
