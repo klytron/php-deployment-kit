@@ -54,6 +54,26 @@ vendor/bin/dep rollback
 
 ## ❌ Common Issues
 
+### Issue: gallery/asset images 403 while everything else returns 200
+
+**Symptoms:** after a root-run deploy, image URLs (e.g. storage/image
+symlinks inside a real-directory `public_html`) answer 403 while pages, CSS
+and JS are fine.
+
+**Cause:** the symlinks were created as root, but the vhost uses Apache
+`SymLinksIfOwnerMatch`, which only follows links owned by the target's owner
+(the app `http_user`). Decision: since `http_user`/`http_group` are always
+defined by the consuming project's `deploy.php`, the finalize permissions
+step re-points just those symlink inodes (`chown -h`, top level only, never
+followed) at `http_user:http_group` on every deploy — no behavior change
+otherwise.
+
+**Verify:**
+```bash
+ls -la <public_html>/ | grep -E 'images|storage'   # links must show the app user, not root
+curl -s -o /dev/null -w "%{http_code}\n" https://<domain>/images/<known-file>
+```
+
 ### Issue: "Permission denied" errors
 
 **Symptoms:**

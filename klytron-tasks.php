@@ -661,6 +661,17 @@ if [ -n "\$PUBLIC_HTML" ] && [ -e "\$PUBLIC_HTML" ]; then
   sudo chown -h "\$HTTP_USER:\$HTTP_GROUP" "\$PUBLIC_HTML" 2>/dev/null || sudo chown "\$HTTP_USER:\$HTTP_GROUP" "\$PUBLIC_HTML" || true
 fi
 
+# Symlinks *inside* a real-directory public_html (storage/images links created
+# during finalize run as the deploy user — root on root-run deploys). Under
+# Apache SymLinksIfOwnerMatch the web server then 403s them while every real
+# file returns 200, so galleries break invisibly. Re-point just the inodes
+# (-h: never follow; top level only; symlinks only) at the http user/group
+# the project configured in deploy.php.
+if [ -n "\$PUBLIC_HTML" ] && [ -d "\$PUBLIC_HTML" ] && [ ! -L "\$PUBLIC_HTML" ]; then
+  echo "→ chown public_html child symlinks..."
+  sudo find "\$PUBLIC_HTML" -maxdepth 1 -type l -exec chown -h "\$HTTP_USER:\$HTTP_GROUP" {} + 2>/dev/null || true
+fi
+
 echo "→ chmod dirs/files (excluding node_modules/.git)..."
 sudo find "\$RELEASE" \\( -name node_modules -o -name .git -o -name .npm-cache \\) -prune -o -type d -exec chmod "\$DIR_MODE" {} +
 sudo find "\$RELEASE" \\( -name node_modules -o -name .git -o -name .npm-cache \\) -prune -o -type f -exec chmod "\$FILE_MODE" {} +

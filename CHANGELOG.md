@@ -5,6 +5,21 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.9] - 2026-10-08
+
+### Fixed
+
+- **Root-owned symlinks inside real-dir `public_html` 403 image traffic**:
+  links created during finalize run as the deploy user (root on root-run
+  deploys), and under Apache `SymLinksIfOwnerMatch` the web server refuses
+  them while real files return 200 — galleries break invisibly on every
+  deploy. `klytron:deploy:access_permissions` now re-points just those
+  symlink inodes (`chown -h`, top level only, never followed) at the
+  `http_user:http_group` the consuming project's `deploy.php` defines.
+  Decided against touching anything else in that step; see
+  `docs/troubleshooting.md` (gallery/asset 403 entry) for symptoms and
+  verification.
+
 ## [1.1.8] - 2026-10-08
 
 ### Fixed
