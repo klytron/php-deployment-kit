@@ -182,6 +182,24 @@ Projects with no env file at all (cron runners, static tooling) declare
 `'env_file_local' => false`: validation and upload both skip cleanly instead
 of aborting the plan on a missing file.
 
+#### Consumer-derived task config
+```php
+'domain_env_var' => 'APP_URL_DOMAIN',   // klytron:set:domain-from-env
+'domain_env_file' => '.env.production',
+'domain_replace_files' => [             // klytron:deploy:replace-tokens
+    '{{release_or_current_path}}/public/loader.php',
+],
+'domain_replace_search' => 'example.com',
+'required_binaries' => ['jpegoptim', 'pngquant'],  // klytron:check:binaries
+'decrypt_paths' => [                    // klytron:laravel:decrypt:paths
+    '{{release_path}}/resources/00-prod-web',
+],
+'extra_artisan_commands' => [           // klytron:laravel:extra-commands
+    'app:sitemap-generate',
+    'storage:link-clean',
+],
+```
+
 #### Laravel-Specific Options
 ```php
 'supports_passport' => false,           // Laravel Passport support

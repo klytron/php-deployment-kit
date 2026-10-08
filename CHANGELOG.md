@@ -5,6 +5,21 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-10-08
+
+### Added
+
+- **Consumer-derived generic tasks** (migrated from a real gallery project's
+  `deploy.php` so no consumer re-invents them — configure, never fork):
+  `klytron:set:domain-from-env`, `klytron:deploy:replace-tokens`,
+  `klytron:check:binaries`, `klytron:laravel:decrypt:paths`,
+  `klytron:laravel:extra-commands`, `klytron:laravel:check:web-php`.
+  Each took the project's bespoke logic verbatim and parameterized only the
+  project-specific parts (file lists, env names, command strings). Decided
+  against absorbing the project's browserconfig step — it shells out to a
+  project-owned generator script with no generic shape. Documented in
+  `docs/task-reference.md` + `docs/configuration-reference.md`.
+
 ## [1.1.11] - 2026-10-08
 
 ### Added

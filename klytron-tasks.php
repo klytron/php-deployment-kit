@@ -1463,3 +1463,124 @@ task('klytron:env:validate', function () {
 task('klytron:env:setup', function () {
     info("⏭️  Skipping env setup - task not available in current configuration");
 })->desc('Setup environment decryption configuration (disabled)')->hidden();
+
+///////////////////////////////////////////////////////////////////////////////
+// CONSUMER-DERIVED GENERIC TASKS (migrated from real project deploy.php files
+// so no consumer re-invents them — configure in deploy.php, never fork)
+///////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Set domain + public-html path from an env file (e.g. APP_URL_DOMAIN).
+ *
+ * Configure:
+ *   'domain_env_var'  => 'APP_URL_DOMAIN',   // env key holding the domain
+ *   'domain_env_file' => '.env.production',  // local file to read it from
+ */
+task('klytron:set:domain-from-env', function () {
+    $var = get('domain_env_var', 'APP_URL_DOMAIN');
+    $file = get('domain_env_file', '.env.production');
+
+    info("🌐 Setting domain configuration from {$file} ({$var})...");
+
+    $domain = klytron_getEnvValue($var, $file, true);
+
+    if (empty($domain)) {
+        throw new \RuntimeException("{$var} not found in {$file} file");
+    }
+
+    klytron_set_domain($domain);
+
+    info('✅ Domain set to: ' . $domain);
+    info('✅ Public HTML path set to: ' . klytron_get_public_html_path());
+})->desc('Sets domain configuration from an env file');
+
+/**
+ * Replace a placeholder string (default example.com) with the live domain in
+ * a configured file list. Anything the kit cannot know (which files carry
+ * baked-in domains, e.g. ad-loader scripts) stays project config:
+ *
+ *   'domain_replace_files'  => ['{{release_or_current_path}}/public/loader.php'],
+ *   'domain_replace_search' => 'example.com',  // replaced by the live domain
+ */
+task('klytron:deploy:replace-tokens', function () {
+    $files = get('domain_replace_files', []);
+    $search = get('domain_replace_search', 'example.com');
+
+    if (empty($files)) {
+        info('ℹ️ No domain_replace_files configured, skipping token replacement.');
+        return;
+    }
+
+    invoke('klytron:validate:domain');
+
+    $domain = get('application_public_domain');
+    info("Using domain: '$domain'");
+
+    $updated = 0;
+    foreach ($files as $filePath) {
+        if (!test("[ -f '$filePath' ]")) {
+            warning("File not found: $filePath");
+            continue;
+        }
+
+        $count = trim((string) run("grep -c '$search' '$filePath' || echo '0'"));
+
+        if ($count === '0') {
+            info("No '$search' occurrences in " . basename($filePath));
+            continue;
+        }
+
+        info("Found $count occurrence(s) of '$search' in " . basename($filePath));
+        run("sed -i 's/$search/$domain/g' '$filePath'");
+
+        $remaining = trim((string) run("grep -c '$search' '$filePath' || echo '0'"));
+        if ($remaining === '0') {
+            info('✅ Updated ' . basename($filePath) . " with domain: $domain");
+            $updated++;
+        } else {
+            warning('⚠ Partial update in ' . basename($filePath));
+        }
+    }
+
+    info("✅ Updated $updated out of " . count($files) . " files with domain: $domain");
+})->desc('Replaces placeholder strings with the live domain in configured files');
+
+/**
+ * Warn (never fail) when expected binaries are missing on the server.
+ * Advisory on purpose: installing system packages mid-deploy makes a mirror
+ * hiccup fail an otherwise-good deploy. Configure:
+ *
+ *   'required_binaries' => ['jpegoptim', 'pngquant'],  // warned when absent
+ */
+task('klytron:check:binaries', function () {
+    $binaries = get('required_binaries', []);
+
+    if (empty($binaries)) {
+        info('ℹ️ No required_binaries configured, skipping binary check.');
+        return;
+    }
+
+    info('🔎 Checking required binaries...');
+
+    $missing = [];
+    foreach ($binaries as $binary) {
+        // Parse output instead of test(): test() false-negatives on some
+        // hosts — always exits 0, empty stdout means absent.
+        $found = trim((string) run('command -v ' . $binary . ' || true'));
+
+        if ($found === '') {
+            $missing[] = $binary;
+        }
+    }
+
+    if (empty($missing)) {
+        info('✅ All required binaries are present.');
+    } else {
+        warning('⚠ Missing binaries: ' . implode(', ', $missing));
+        warning('⚠ Depending on the project, some work may silently degrade.');
+        warning('');
+        warning('  Install on the server, then re-run the deploy.');
+        warning('');
+        warning('  The deploy is still successful — this is advisory, not a blocker.');
+    }
+})->desc('Warns when required server binaries are missing (never fails)');

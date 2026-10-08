@@ -2227,3 +2227,102 @@ task('klytron:laravel:backup:cleanup:restoration', function () {
     
     info("✅ Temporary backup files cleanup completed");
 })->desc('Clean up temporary backup files created during restoration process');
+
+///////////////////////////////////////////////////////////////////////////////
+// CONSUMER-DERIVED GENERIC TASKS (migrated from real project deploy.php files
+// so no consumer re-invents them — configure in deploy.php, never fork)
+///////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Decrypt asset/source directories with the project's own artisan command
+ * (e.g. `artisan file:decrypt <dir>` from an encryption package). Configure:
+ *
+ *   'decrypt_paths' => ['{{release_path}}/resources/00-prod-web'],
+ *
+ * Runs after .env upload + vendors, so keys and commands both exist.
+ */
+task('klytron:laravel:decrypt:paths', function () {
+    $paths = get('decrypt_paths', []);
+
+    if (empty($paths)) {
+        info('ℹ️ No decrypt_paths configured, skipping asset decryption.');
+        return;
+    }
+
+    foreach ($paths as $path) {
+        info("🔓 Decrypting files in $path...");
+        run('{{bin/php}} {{release_path}}/artisan file:decrypt ' . $path);
+    }
+
+    info('✅ Asset decryption completed');
+})->desc('Decrypts configured release paths via artisan file:decrypt');
+
+/**
+ * Run extra project artisan commands at the wired flow point (sitemap
+ * generation, project-specific link fixups, etc.). Configure:
+ *
+ *   'extra_artisan_commands' => [
+ *       'app:sitemap-generate',
+ *       'storage:link-clean',
+ *   ],
+ *
+ * Each runs as `{{bin/php}} {{release_path}}/artisan <command> --force`-less,
+ * verbatim — flags belong in the configured string. A failing command fails
+ * the deploy (these are project-chosen, not advisory).
+ */
+task('klytron:laravel:extra-commands', function () {
+    $commands = get('extra_artisan_commands', []);
+
+    if (empty($commands)) {
+        info('ℹ️ No extra_artisan_commands configured, skipping.');
+        return;
+    }
+
+    foreach ($commands as $command) {
+        info("⚙️ Running: php artisan $command");
+        run('{{bin/php}} {{release_path}}/artisan ' . $command);
+    }
+
+    info('✅ Extra artisan commands completed');
+})->desc('Runs project-configured extra artisan commands');
+
+/**
+ * Warn when the domain web tier serves an older PHP than composer requires.
+ * A deploy sets {{bin/php}} for artisan but never changes the domain's FPM
+ * pool — on mismatch every page is a blank 500 from platform_check with
+ * nothing in the app log. Detection asks the running site (any non-success
+ * status is the signal), never parses server internals. Advisory on purpose.
+ */
+task('klytron:laravel:check:web-php', function () {
+    info('🐘 Checking the PHP version the web tier will serve this release on...');
+
+    $required = trim((string) shell_exec('php -r \'$c = json_decode(file_get_contents("composer.json"), true); echo $c["require"]["php"] ?? "";\' 2>/dev/null'));
+    $floor = trim((string) shell_exec('php -r \'preg_match("/PHP_VERSION_ID\\s*>=\\s*(\\d+)/", (string) @file_get_contents("vendor/composer/platform_check.php"), $m); echo $m[1] ?? "";\' 2>/dev/null'));
+
+    info('   Project requires: ' . ($required !== '' ? $required : 'unknown (composer.json unreadable)'));
+    if ($floor !== '') {
+        info('   Composer enforces: PHP ' . intdiv((int) $floor, 10000) . '.' . intdiv((int) $floor % 10000, 100) . '.' . ((int) $floor % 100) . ' or newer');
+    }
+
+    $url = get('application_public_url');
+
+    try {
+        $reported = trim((string) run("curl -s --max-time 15 '$url' -o /dev/null -w '%{http_code}'"));
+    } catch (\Throwable $e) {
+        $reported = '000';
+    }
+
+    if (in_array($reported, ['200', '301', '302'], true)) {
+        info('✅ The site responds (' . $reported . ') on the new release.');
+        info('');
+        info('   Still confirm the domain PHP in the hosting panel — a deploy');
+        info('   sets the artisan binary, never the domain FPM pool.');
+        return;
+    }
+
+    warning('⚠ The site did not respond with a success status after this deploy (HTTP ' . $reported . ').');
+    warning('');
+    warning('  If the project just moved to a newer PHP, the almost certain cause');
+    warning('  is that the DOMAIN is still on the old one: raise it to the version');
+    warning('  listed above, reload FPM, and re-check.');
+})->desc('Warns when the domain web tier serves an older PHP than required');

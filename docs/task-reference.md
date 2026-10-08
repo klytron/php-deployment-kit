@@ -863,6 +863,24 @@ Publishes Filament v5 panel vendor assets into `public/`.
 - Runs automatically before `deploy:symlink` when `supports_filament` is enabled or `filament/filament` is detected in `composer.json`.
 - Executes `php artisan filament:assets` to ensure all stylesheets and scripts are published and cache-busted for the new release.
 
+### Consumer-derived generic tasks
+
+Migrated from real project `deploy.php` files so consumers configure instead
+of forking. All read plain project config — see `configuration-reference.md`.
+
+| Task | Config keys | What it replaces |
+|---|---|---|
+| `klytron:set:domain-from-env` | `domain_env_var` (default `APP_URL_DOMAIN`), `domain_env_file` (default `.env.production`) | Per-project "read domain from env file" tasks |
+| `klytron:deploy:replace-tokens` | `domain_replace_files` (list, `{{…}}` placeholders allowed), `domain_replace_search` (default `example.com`) | Per-project sed loops over ad-loader/config files |
+| `klytron:check:binaries` | `required_binaries` (list) | Per-project optimizer/tool presence warnings; warning-only, never fails |
+| `klytron:laravel:decrypt:paths` | `decrypt_paths` (release-relative dirs) | Per-project `artisan file:decrypt <dir>` loops |
+| `klytron:laravel:extra-commands` | `extra_artisan_commands` (verbatim command strings) | Per-project sitemap/link-fixup tasks — wire once in the flow |
+| `klytron:laravel:check:web-php` | none (reads local `composer.json` + live URL) | Per-project "is the domain PHP new enough" warnings |
+
+Wire the flow-point tasks in the project's `deploy` list (e.g.
+`extra-commands` after finalize, `check:web-php` at the end); the rest run
+standalone or wherever the flow needs them.
+
 ### `klytron:deploy:health_check`
 
 Automated HTTP verification task that ensures the application is live and returning HTTP 200 post-symlink.
