@@ -5,6 +5,18 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.8] - 2026-10-08
+
+### Fixed
+
+- **SQLite migration failure auto-continued green**: the sqlite branch of
+  `klytron:laravel:deploy:db:migrate` defaulted its "continue despite failure?"
+  prompt to yes, so a failed `migrate --force` (e.g. a pre-existing plugin
+  table aborting the run) still produced a successful deploy — the site went
+  live 11 migrations short of its code. Now defaults to **no** (fail, matching
+  the MySQL branch) and prints the still-`Pending` rows from
+  `migrate:status` so the exact schema gap is visible in the deploy log.
+
 ## [1.1.7] - 2026-10-07
 
 ### Fixed

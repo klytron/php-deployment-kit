@@ -1020,9 +1020,23 @@ task('klytron:laravel:deploy:db:migrate', function () {
             
         } catch (\Exception $e) {
             error("❌ SQLite database migration failed: " . $e->getMessage());
-            
-            // For SQLite, we can be more lenient since it's file-based
-            $continueAnyway = askConfirmation("Continue deployment despite SQLite migration failure?", true);
+
+            // Fail-loud: a green deploy with unapplied migrations serves code
+            // the schema cannot satisfy (real case: a pre-existing plugin table
+            // aborted the run and the site went live 11 migrations short).
+            // List what is still pending so the operator knows the exact state.
+            try {
+                $status = run('cd {{release_path}} && {{bin/php}} artisan migrate:status');
+                foreach (explode("\n", (string) $status) as $line) {
+                    if (stripos($line, 'pending') !== false) {
+                        warning('  still pending: ' . trim($line));
+                    }
+                }
+            } catch (\Throwable $ignored) {
+                // Status itself failed — the error above already carries the signal.
+            }
+
+            $continueAnyway = askConfirmation("Continue deployment despite SQLite migration failure?", false);
             if (!$continueAnyway) {
                 throw new \RuntimeException("Deployment cancelled due to SQLite migration failure.");
             }
