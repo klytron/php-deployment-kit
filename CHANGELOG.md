@@ -5,6 +5,19 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.10] - 2026-10-08
+
+### Fixed
+
+- **v1.1.9 symlink fix missed both real layouts**: plain `chown` follows
+  symlinks, so the release-tree pass fixed targets but left link inodes
+  root-owned; and the new `public_html` child-link pass guarded on
+  `[ ! -L ]`, skipping exactly the symlinked-`public_html` layout the kit's
+  own `server_symlink` creates. Now the release pass adds a `chown -h`
+  symlink-inode sweep, and the served-dir pass uses `find -H` (follows the
+  command-line path, top level, inodes only) with no symlink exclusion. See
+  `docs/troubleshooting.md` (gallery/asset 403 entry) for the full lesson.
+
 ## [1.1.9] - 2026-10-08
 
 ### Fixed

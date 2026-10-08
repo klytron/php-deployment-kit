@@ -62,11 +62,15 @@ and JS are fine.
 
 **Cause:** the symlinks were created as root, but the vhost uses Apache
 `SymLinksIfOwnerMatch`, which only follows links owned by the target's owner
-(the app `http_user`). Decision: since `http_user`/`http_group` are always
-defined by the consuming project's `deploy.php`, the finalize permissions
-step re-points just those symlink inodes (`chown -h`, top level only, never
-followed) at `http_user:http_group` on every deploy — no behavior change
-otherwise.
+(the app `http_user`). Two subtleties learned the hard way: plain `chown`
+*follows* symlinks (fixes targets, leaves link inodes root-owned — always use
+`chown -h` for the inodes), and the served dir itself is often a symlink
+(kit `server_symlink` points `public_html` at the release `public/`), so the
+fix must follow the command-line path (`find -H`) rather than skipping
+symlinked dirs. Decision: since `http_user`/`http_group` are always defined
+by the consuming project's `deploy.php`, the finalize permissions step
+re-points both the release-tree link inodes and the served-dir child links at
+them on every deploy — no behavior change otherwise.
 
 **Verify:**
 ```bash

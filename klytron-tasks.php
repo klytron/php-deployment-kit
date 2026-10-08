@@ -646,6 +646,12 @@ CACHE_MODE='{$cachePerms}'
 echo "→ chown release (excluding node_modules/.git)..."
 sudo find "\$RELEASE" \\( -name node_modules -o -name .git -o -name .npm-cache \\) -prune -o \\( -type d -o -type f -o -type l \\) -exec chown "\$HTTP_USER:\$HTTP_GROUP" {} +
 
+# Plain chown follows symlinks (fixes targets, leaves link inodes root-owned
+# on root-run deploys). Re-point the inodes themselves too — under Apache
+# SymLinksIfOwnerMatch a root-owned link 403s while everything else is 200.
+echo "→ chown release symlink inodes..."
+sudo find "\$RELEASE" \\( -name node_modules -o -name .git -o -name .npm-cache \\) -prune -o -type l -exec chown -h "\$HTTP_USER:\$HTTP_GROUP" {} + 2>/dev/null || true
+
 if [ -d "\$SHARED/storage" ]; then
   echo "→ chown shared/storage..."
   sudo timeout 120 chown -R "\$HTTP_USER:\$HTTP_GROUP" "\$SHARED/storage" || true
@@ -661,15 +667,16 @@ if [ -n "\$PUBLIC_HTML" ] && [ -e "\$PUBLIC_HTML" ]; then
   sudo chown -h "\$HTTP_USER:\$HTTP_GROUP" "\$PUBLIC_HTML" 2>/dev/null || sudo chown "\$HTTP_USER:\$HTTP_GROUP" "\$PUBLIC_HTML" || true
 fi
 
-# Symlinks *inside* a real-directory public_html (storage/images links created
-# during finalize run as the deploy user — root on root-run deploys). Under
-# Apache SymLinksIfOwnerMatch the web server then 403s them while every real
-# file returns 200, so galleries break invisibly. Re-point just the inodes
-# (-h: never follow; top level only; symlinks only) at the http user/group
-# the project configured in deploy.php.
-if [ -n "\$PUBLIC_HTML" ] && [ -d "\$PUBLIC_HTML" ] && [ ! -L "\$PUBLIC_HTML" ]; then
-  echo "→ chown public_html child symlinks..."
-  sudo find "\$PUBLIC_HTML" -maxdepth 1 -type l -exec chown -h "\$HTTP_USER:\$HTTP_GROUP" {} + 2>/dev/null || true
+# Links inside the served web dir. Two layouts exist: a real-directory
+# public_html holding its own symlinks, or public_html itself symlinked at
+# the release public dir (kit server_symlink). -H follows a command-line
+# symlink so children are covered in both layouts; -maxdepth 1 + -type l
+# keeps it to inodes only, never followed, never recursive.
+# (v1.1.9 guarded on [ ! -L ], which skipped exactly the symlinked layout
+# every Virtualmin consumer has — fixed here.)
+if [ -n "\$PUBLIC_HTML" ] && [ -e "\$PUBLIC_HTML" ]; then
+  echo "→ chown served-dir child symlinks..."
+  sudo find -H "\$PUBLIC_HTML" -maxdepth 1 -type l -exec chown -h "\$HTTP_USER:\$HTTP_GROUP" {} + 2>/dev/null || true
 fi
 
 echo "→ chmod dirs/files (excluding node_modules/.git)..."
