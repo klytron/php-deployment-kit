@@ -17,8 +17,8 @@ namespace Deployer;
 // deployment-kit.php bootstraps Deployer and registers all klytron_* helpers.
 // The Laravel recipe adds all Laravel-specific tasks (artisan, Vite, passport…)
 
-require __DIR__ . '/vendor/klytron/php-deployment-kit/deployment-kit.php';
-require __DIR__ . '/vendor/klytron/php-deployment-kit/recipes/klytron-laravel-recipe.php';
+require dirname(__DIR__) . '/vendor/klytron/php-deployment-kit/deployment-kit.php';
+require dirname(__DIR__) . '/vendor/klytron/php-deployment-kit/recipes/klytron-laravel-recipe.php';
 
 // ── Application ───────────────────────────────────────────────────────────────
 // The third parameter passes any standard Deployer global config.
@@ -81,6 +81,8 @@ klytron_configure_project([
 
     // Laravel env encryption (requires LARAVEL_ENV_ENCRYPTION_KEY env var)
     'enable_encryption' => false,  // true = decrypt .env on server before use
+    // 'env_file_local'  => false, // No env file for this project — skips .env
+    //                              // upload + validation (cron runners, static tooling).
 ]);
 
 // ── Host ──────────────────────────────────────────────────────────────────────
@@ -92,7 +94,7 @@ klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
     'http_user'   => 'www-data',         // Web server user
     'http_group'  => 'www-data',         // Web server group
     'labels'      => ['stage' => 'production'],
-    'ssh_options' => [
+    'ssh_arguments' => [
         'ConnectTimeout'      => 30,
         'ServerAliveInterval' => 60,
         'ServerAliveCountMax' => 3,
@@ -161,6 +163,7 @@ task('deploy', [
     'klytron:deploy:start_timer',                     // Start wall-clock timer
     'klytron:validate:basic',                         // Validate deploy path, domain, .env, and placeholders
     'deploy:unlock',                                  // Remove stale lock file
+    'klytron:deploy:fix_repo',                        // Clear stale git locks, configure safe.directory
     'klytron:laravel:deploy:prepare:complete',        // Confirm + optional backup
 
     // — Code update —

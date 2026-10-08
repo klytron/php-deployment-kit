@@ -16,17 +16,17 @@ Klytron Deployer is designed to be highly customizable while providing sensible 
 
 ### Creating Custom Tasks
 
-Use the `klytron_add_task()` function to create custom tasks:
+Use the `task()` function to create custom tasks:
 
 ```php
 // Basic custom task
-klytron_add_task('deploy:custom', function () {
+task('deploy:custom', function () {
     run('echo "Running custom deployment task"');
     run('php artisan custom:command');
-}, [
-    'description' => 'Run custom deployment task',
-    'dependencies' => ['deploy:update_code'],
-]);
+})->desc('Run custom deployment task');
+
+// Run it after the code update step (replaces the old 'dependencies' option)
+after('deploy:update_code', 'deploy:custom');
 ```
 
 ### Task with Parameters
@@ -34,7 +34,7 @@ klytron_add_task('deploy:custom', function () {
 Create tasks that accept parameters:
 
 ```php
-klytron_add_task('deploy:custom_with_params', function () {
+task('deploy:custom_with_params', function () {
     $param1 = get('custom_param1', 'default_value');
     $param2 = get('custom_param2', 'default_value');
     
@@ -43,9 +43,7 @@ klytron_add_task('deploy:custom_with_params', function () {
     
     // Use parameters in commands
     run("php artisan custom:command --param1={$param1} --param2={$param2}");
-}, [
-    'description' => 'Run custom task with parameters',
-]);
+})->desc('Run custom task with parameters');
 ```
 
 ### Task with Error Handling
@@ -53,7 +51,7 @@ klytron_add_task('deploy:custom_with_params', function () {
 Add proper error handling to your tasks:
 
 ```php
-klytron_add_task('deploy:custom_safe', function () {
+task('deploy:custom_safe', function () {
     try {
         writeln('<info>Starting custom task...</info>');
         
@@ -65,9 +63,7 @@ klytron_add_task('deploy:custom_safe', function () {
         writeln('<error>Custom task failed: ' . $e->getMessage() . '</error>');
         throw $e;
     }
-}, [
-    'description' => 'Run custom task with error handling',
-]);
+})->desc('Run custom task with error handling');
 ```
 
 ### Conditional Tasks
@@ -75,7 +71,7 @@ klytron_add_task('deploy:custom_safe', function () {
 Create tasks that run conditionally:
 
 ```php
-klytron_add_task('deploy:conditional', function () {
+task('deploy:conditional', function () {
     $stage = get('stage', 'production');
     $shouldRun = get('run_custom_task', false);
     
@@ -85,9 +81,7 @@ klytron_add_task('deploy:conditional', function () {
     } else {
         writeln('<comment>Skipping conditional task</comment>');
     }
-}, [
-    'description' => 'Run conditional deployment task',
-]);
+})->desc('Run conditional deployment task');
 ```
 
 ## 🎯 Custom Hooks
@@ -98,13 +92,13 @@ Hooks allow you to execute code at specific points in the deployment process:
 
 ```php
 // Add hook to run after deployment
-klytron_add_hook('after:deploy', 'deploy:custom');
+after('deploy', 'deploy:custom');
 
 // Add hook to run before deployment
-klytron_add_hook('before:deploy', 'deploy:preparation');
+before('deploy', 'deploy:preparation');
 
 // Add hook to run after code update
-klytron_add_hook('after:deploy:update_code', 'deploy:post_update');
+after('deploy:update_code', 'deploy:post_update');
 ```
 
 ### Available Hook Points
@@ -132,7 +126,7 @@ klytron_add_hook('after:deploy:update_code', 'deploy:post_update');
 
 ```php
 // Pre-deployment hook
-klytron_add_task('deploy:preparation', function () {
+task('deploy:preparation', function () {
     writeln('<info>Preparing for deployment...</info>');
     
     // Check server resources
@@ -144,12 +138,10 @@ klytron_add_task('deploy:preparation', function () {
     // Check PHP version
     $phpVersion = run('php -v | head -1');
     writeln('<info>PHP Version: ' . $phpVersion . '</info>');
-}, [
-    'description' => 'Prepare deployment environment',
-]);
+})->desc('Prepare deployment environment');
 
 // Post-deployment hook
-klytron_add_task('deploy:post_deploy', function () {
+task('deploy:post_deploy', function () {
     writeln('<info>Post-deployment tasks...</info>');
     
     // Clear application cache
@@ -160,13 +152,11 @@ klytron_add_task('deploy:post_deploy', function () {
     
     // Update deployment status
     run('echo "$(date): Deployment completed" >> /var/log/deployments.log');
-}, [
-    'description' => 'Post-deployment tasks',
-]);
+})->desc('Post-deployment tasks');
 
 // Add hooks
-klytron_add_hook('before:deploy', 'deploy:preparation');
-klytron_add_hook('after:deploy', 'deploy:post_deploy');
+before('deploy', 'deploy:preparation');
+after('deploy', 'deploy:post_deploy');
 ```
 
 ## 🎯 Custom Deployment Flows
@@ -199,7 +189,7 @@ Create a custom deployment strategy:
 
 ```php
 // Blue-green deployment strategy
-klytron_add_task('deploy:blue_green', function () {
+task('deploy:blue_green', function () {
     $currentRelease = get('current_release');
     $newRelease = get('new_release');
     
@@ -222,9 +212,7 @@ klytron_add_task('deploy:blue_green', function () {
         writeln('<info>Cleaning up old release...</info>');
         run("rm -rf {$currentRelease}");
     }
-}, [
-    'description' => 'Blue-green deployment strategy',
-]);
+})->desc('Blue-green deployment strategy');
 ```
 
 ## 🎯 Environment-Specific Customization
@@ -239,11 +227,11 @@ $stage = get('stage', 'production');
 
 if ($stage === 'production') {
     // Production-specific tasks
-    klytron_add_task('deploy:production', function () {
+    task('deploy:production', function () {
         writeln('<info>Running production-specific tasks...</info>');
         
         // Backup before deployment
-        invoke('deploy:database:backup');
+        invoke('klytron:deploy:backup:create');
         
         // Run production optimizations
         run('php artisan config:cache');
@@ -255,11 +243,11 @@ if ($stage === 'production') {
     });
     
     // Add to deployment flow
-    klytron_add_hook('after:deploy:vendors', 'deploy:production');
+    after('deploy:vendors', 'deploy:production');
     
 } elseif ($stage === 'staging') {
     // Staging-specific tasks
-    klytron_add_task('deploy:staging', function () {
+    task('deploy:staging', function () {
         writeln('<info>Running staging-specific tasks...</info>');
         
         // Run tests
@@ -270,7 +258,7 @@ if ($stage === 'production') {
     });
     
     // Add to deployment flow
-    klytron_add_hook('after:deploy:vendors', 'deploy:staging');
+    after('deploy:vendors', 'deploy:staging');
 }
 ```
 
@@ -280,7 +268,7 @@ Customize behavior based on host:
 
 ```php
 // Host-specific tasks
-klytron_add_task('deploy:host_specific', function () {
+task('deploy:host_specific', function () {
     $hostname = get('hostname');
     
     switch ($hostname) {
@@ -299,12 +287,10 @@ klytron_add_task('deploy:host_specific', function () {
             run('php artisan migrate');
             break;
     }
-}, [
-    'description' => 'Host-specific deployment tasks',
-]);
+})->desc('Host-specific deployment tasks');
 
 // Add to deployment flow
-klytron_add_hook('after:deploy:symlink', 'deploy:host_specific');
+after('deploy:symlink', 'deploy:host_specific');
 ```
 
 ## 🎯 Custom Framework Support
@@ -315,7 +301,7 @@ Create custom framework support:
 
 ```php
 // Custom framework recipe
-klytron_add_task('deploy:custom_framework', function () {
+task('deploy:custom_framework', function () {
     $framework = get('framework_type', 'custom');
     
     if ($framework === 'custom') {
@@ -333,12 +319,10 @@ klytron_add_task('deploy:custom_framework', function () {
         run('rm -rf cache/*');
         run('rm -rf temp/*');
     }
-}, [
-    'description' => 'Deploy custom framework',
-]);
+})->desc('Deploy custom framework');
 
 // Add to deployment flow
-klytron_add_hook('after:deploy:vendors', 'deploy:custom_framework');
+after('deploy:vendors', 'deploy:custom_framework');
 ```
 
 ### Framework Detection
@@ -347,7 +331,7 @@ Automatically detect and configure frameworks:
 
 ```php
 // Framework detection
-klytron_add_task('deploy:detect_framework', function () {
+task('deploy:detect_framework', function () {
     $composerJson = get('composer_json', 'composer.json');
     
     if (file_exists($composerJson)) {
@@ -367,12 +351,10 @@ klytron_add_task('deploy:detect_framework', function () {
         set('framework_type', 'simple');
         writeln('<info>No framework detected, using simple deployment</info>');
     }
-}, [
-    'description' => 'Detect application framework',
-]);
+})->desc('Detect application framework');
 
 // Add to deployment flow
-klytron_add_hook('before:deploy:update_code', 'deploy:detect_framework');
+before('deploy:update_code', 'deploy:detect_framework');
 ```
 
 ## 🎯 Custom Configuration
@@ -383,7 +365,7 @@ Create dynamic configuration based on environment:
 
 ```php
 // Dynamic configuration
-klytron_add_task('deploy:configure_dynamic', function () {
+task('deploy:configure_dynamic', function () {
     $stage = get('stage', 'production');
     $hostname = get('hostname');
     
@@ -412,12 +394,10 @@ klytron_add_task('deploy:configure_dynamic', function () {
         set('asset_url', 'http://localhost:3000');
         set('asset_compression', false);
     }
-}, [
-    'description' => 'Configure dynamic settings',
-]);
+})->desc('Configure dynamic settings');
 
 // Add to deployment flow
-klytron_add_hook('before:deploy:update_code', 'deploy:configure_dynamic');
+before('deploy:update_code', 'deploy:configure_dynamic');
 ```
 
 ### Configuration Validation
@@ -426,11 +406,11 @@ Validate configuration before deployment:
 
 ```php
 // Configuration validation
-klytron_add_task('deploy:validate_config', function () {
+task('deploy:validate_config', function () {
     writeln('<info>Validating configuration...</info>');
     
     // Required settings
-    $required = ['app_name', 'repository', 'deploy_path'];
+    $required = ['application', 'repository', 'deploy_path'];
     
     foreach ($required as $setting) {
         if (!get($setting)) {
@@ -445,7 +425,7 @@ klytron_add_task('deploy:validate_config', function () {
     }
     
     // Validate database settings
-    if (get('database') !== 'none') {
+    if (get('database_type', 'none') !== 'none') {
         $dbSettings = ['db_host', 'db_name', 'db_user'];
         foreach ($dbSettings as $setting) {
             if (!get($setting)) {
@@ -455,12 +435,10 @@ klytron_add_task('deploy:validate_config', function () {
     }
     
     writeln('<info>Configuration validation passed!</info>');
-}, [
-    'description' => 'Validate deployment configuration',
-]);
+})->desc('Validate deployment configuration');
 
 // Add to deployment flow
-klytron_add_hook('before:deploy', 'deploy:validate_config');
+before('deploy', 'deploy:validate_config');
 ```
 
 ## 🎯 Custom Notifications
@@ -471,11 +449,11 @@ Add custom notification systems:
 
 ```php
 // Slack notification
-klytron_add_task('deploy:notify_slack', function () {
+task('deploy:notify_slack', function () {
     $webhookUrl = get('slack_webhook_url');
     $channel = get('slack_channel', '#deployments');
     $stage = get('stage', 'production');
-    $appName = get('app_name');
+    $appName = get('application');
     
     if ($webhookUrl) {
         $message = [
@@ -508,14 +486,12 @@ klytron_add_task('deploy:notify_slack', function () {
         $json = json_encode($message);
         run("curl -X POST -H 'Content-type: application/json' --data '{$json}' {$webhookUrl}");
     }
-}, [
-    'description' => 'Send Slack notification',
-]);
+})->desc('Send Slack notification');
 
 // Email notification
-klytron_add_task('deploy:notify_email', function () {
+task('deploy:notify_email', function () {
     $emailRecipients = get('email_recipients', []);
-    $appName = get('app_name');
+    $appName = get('application');
     $stage = get('stage', 'production');
     
     if (!empty($emailRecipients)) {
@@ -526,13 +502,11 @@ klytron_add_task('deploy:notify_email', function () {
             run("echo '{$body}' | mail -s '{$subject}' {$email}");
         }
     }
-}, [
-    'description' => 'Send email notification',
-]);
+})->desc('Send email notification');
 
 // Add notifications to deployment flow
-klytron_add_hook('after:deploy', 'deploy:notify_slack');
-klytron_add_hook('after:deploy', 'deploy:notify_email');
+after('deploy', 'deploy:notify_slack');
+after('deploy', 'deploy:notify_email');
 ```
 
 ## 🎯 Custom Health Checks
@@ -543,7 +517,7 @@ Create custom health check tasks:
 
 ```php
 // Health check task
-klytron_add_task('deploy:health_check', function () {
+task('deploy:health_check', function () {
     writeln('<info>Running health checks...</info>');
     
     $healthChecks = [
@@ -565,12 +539,10 @@ klytron_add_task('deploy:health_check', function () {
     }
     
     writeln('<info>All health checks passed!</info>');
-}, [
-    'description' => 'Run application health checks',
-]);
+})->desc('Run application health checks');
 
 // Add health check to deployment flow
-klytron_add_hook('after:deploy:symlink', 'deploy:health_check');
+after('deploy:symlink', 'deploy:health_check');
 ```
 
 ## 🎯 Custom Rollback
@@ -581,7 +553,7 @@ Create custom rollback procedures:
 
 ```php
 // Custom rollback task
-klytron_add_task('deploy:custom_rollback', function () {
+task('deploy:custom_rollback', function () {
     writeln('<info>Starting custom rollback...</info>');
     
     // Get current and previous releases
@@ -593,9 +565,9 @@ klytron_add_task('deploy:custom_rollback', function () {
     }
     
     // Database rollback
-    if (get('database') !== 'none') {
+    if (get('database_type', 'none') !== 'none') {
         writeln('<info>Rolling back database...</info>');
-        invoke('deploy:database:rollback');
+        invoke('rollback');
     }
     
     // Switch to previous release
@@ -612,9 +584,7 @@ klytron_add_task('deploy:custom_rollback', function () {
     invoke('deploy:health_check');
     
     writeln('<info>Rollback completed successfully!</info>');
-}, [
-    'description' => 'Custom rollback procedure',
-]);
+})->desc('Custom rollback procedure');
 ```
 
 ## 🎯 Best Practices for Customization
@@ -672,31 +642,31 @@ klytron_configure_host('myapp.com', [
     'remote_user' => 'deploy',
     'http_user' => 'www-data',
     'slack_webhook_url' => 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL',
-    'email_recipients' => ['admin@myapp.com'],
+    'email_recipients' => ['admin@example.com'],
 ]);
 
 // Custom tasks
-klytron_add_task('deploy:custom_prep', function () {
+task('deploy:custom_prep', function () {
     writeln('<info>Running custom preparation...</info>');
     run('php artisan down --message="Deploying..." --retry=60');
-}, ['description' => 'Custom preparation']);
+})->desc('Custom preparation');
 
-klytron_add_task('deploy:custom_post', function () {
+task('deploy:custom_post', function () {
     writeln('<info>Running custom post-deployment...</info>');
     run('php artisan up');
     run('php artisan queue:restart');
-}, ['description' => 'Custom post-deployment']);
+})->desc('Custom post-deployment');
 
-klytron_add_task('deploy:notify', function () {
+task('deploy:notify', function () {
     invoke('deploy:notify_slack');
     invoke('deploy:notify_email');
-}, ['description' => 'Send notifications']);
+})->desc('Send notifications');
 
 // Add custom tasks to deployment flow
-klytron_add_hook('before:deploy', 'deploy:custom_prep');
-klytron_add_hook('after:deploy', 'deploy:custom_post');
-klytron_add_hook('after:deploy', 'deploy:notify');
-klytron_add_hook('after:deploy:symlink', 'deploy:health_check');
+before('deploy', 'deploy:custom_prep');
+after('deploy', 'deploy:custom_post');
+after('deploy', 'deploy:notify');
+after('deploy:symlink', 'deploy:health_check');
 ```
 
 ## 🎯 Next Steps

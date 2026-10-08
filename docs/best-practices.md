@@ -21,7 +21,7 @@ This guide covers deployment best practices, security considerations, and optimi
 
 ```bash
 # Generate a new SSH key for deployment
-ssh-keygen -t ed25519 -C "deployment@myapp.com" -f ~/.ssh/deploy_key
+ssh-keygen -t ed25519 -C "deploy@example.com" -f ~/.ssh/deploy_key
 
 # Set proper permissions
 chmod 600 ~/.ssh/deploy_key
@@ -50,7 +50,6 @@ ssh-add ~/.ssh/deploy_key
 klytron_configure_project([
     'env_file_local' => '.env.production',
     'env_file_remote' => '.env',
-    'env_backup_enabled' => true,
 ]);
 ```
 
@@ -111,12 +110,9 @@ vendor/bin/dep deploy --dry-run       # Simulate deployment
 - Deploy during peak hours
 
 ```php
-// Enable backup before deployment
-klytron_configure_project([
-    'backup_enabled' => true,
-    'backup_database' => true,
-    'backup_before_deploy' => true,
-]);
+// Enable backup before deployment (real kit flags)
+set('shouldBackupBeforeDeployment', true); // pre-deploy snapshot of current release
+set('shouldBackupDatabase', true);         // include a database dump when possible
 ```
 
 ### Release Management
@@ -160,12 +156,11 @@ klytron_configure_app('my-app', 'git@github.com:user/my-app.git', [
 - Use inefficient database operations
 
 ```php
-// Configure database optimization
-klytron_configure_project([
-    'database' => 'mysql',
-    'db_optimization' => true,
-    'migrations' => true,
-    'backup_before_migrate' => true,
+// Configure database via the kit (real keys)
+klytron_configure_database('mysql', [
+    'import_path' => 'database/live-db-exports', // used by db:import tasks
+    'supports_migrations' => true,
+    'supports_seeders' => true,
 ]);
 ```
 
@@ -185,12 +180,12 @@ klytron_configure_project([
 - Disable caching in production
 
 ```php
-// Configure asset optimization
+// Configure asset optimization (real kit flags)
 klytron_configure_project([
-    'supports_vite' => true,
-    'supports_mix' => false,
-    'asset_optimization' => true,
-    'cdn_enabled' => true,
+    'supports_vite' => true,  // npm run build (Vite)
+    'supports_mix' => false,  // npm run production (Mix)
+    'cleanup_assets' => true, // remove rogue .htaccess from build output
+    'optimize_images' => true, // compress images in storage/app/public/
 ]);
 ```
 
@@ -210,11 +205,12 @@ klytron_configure_project([
 - Use inappropriate cache TTL
 
 ```php
-// Configure caching
+// Caching is application config, not kit config — put it in your .env file:
+// CACHE_DRIVER=redis, SESSION_DRIVER=redis. The kit only needs to know
+// whether to run cache tasks (Laravel recipe handles artisan cache commands).
 klytron_configure_project([
-    'cache_driver' => 'redis',
-    'session_driver' => 'redis',
-    'cache_warming' => true,
+    'type' => 'laravel',
+    'database' => 'mysql',
 ]);
 ```
 
@@ -236,19 +232,13 @@ klytron_configure_project([
 - Make configuration changes without testing
 
 ```php
-// Environment-specific configuration
+// Environment-specific configuration — app settings live in your .env
+// files, not in kit config. The kit only consumes the keys documented in
+// configuration-reference.md.
 if (get('stage') === 'production') {
-    klytron_configure_project([
-        'debug' => false,
-        'cache_driver' => 'redis',
-        'queue_driver' => 'redis',
-    ]);
+    set('app_debug', false); // example custom flag read by your own tasks
 } else {
-    klytron_configure_project([
-        'debug' => true,
-        'cache_driver' => 'file',
-        'queue_driver' => 'sync',
-    ]);
+    set('app_debug', true);
 }
 ```
 
@@ -276,10 +266,11 @@ klytron_configure_host('prod.myapp.com', [
         'env' => 'prod',
         'region' => 'us-east-1',
     ],
-    'roles' => ['app', 'web'],
-    'multiplexing' => true,
     'default_timeout' => 1800,
 ]);
+
+// SSH multiplexing is a global Deployer setting, not a host key:
+set('ssh_multiplexing', true);
 ```
 
 ## 📈 Monitoring and Logging
@@ -300,12 +291,12 @@ klytron_configure_host('prod.myapp.com', [
 - Ignore server resource usage
 
 ```php
-// Configure monitoring
-klytron_configure_project([
-    'monitoring_enabled' => true,
-    'deployment_logging' => true,
-    'alert_on_failure' => true,
-]);
+// Monitoring: the kit prints timing via klytron:deploy:start_timer /
+// klytron:deploy:end_timer and validates post-deploy state with
+// klytron:deploy:health_check. Wire those tasks into your deploy flow
+// (see quick-start.md) and alert on a non-zero `dep` exit code in CI.
+set('health_check_timeout', 15);
+set('health_check_expected_code', 200);
 ```
 
 ### Health Checks
@@ -325,7 +316,7 @@ klytron_configure_project([
 
 ```php
 // Configure health checks
-klytron_add_task('deploy:health_check', function () {
+task('deploy:health_check', function () {
     run('curl -f http://localhost/health || exit 1');
     run('php artisan health:check');
 });
@@ -413,14 +404,14 @@ echo "Deployment completed successfully!"
 
 ```php
 // Error handling example
-klytron_add_task('deploy:safe', function () {
+task('deploy:safe', function () {
     try {
         invoke('deploy:update_code');
         invoke('deploy:vendors');
         invoke('deploy:publish');
     } catch (Exception $e) {
         writeln('<error>Deployment failed: ' . $e->getMessage() . '</error>');
-        invoke('deploy:rollback');
+        invoke('rollback');
         throw $e;
     }
 });
@@ -442,11 +433,10 @@ klytron_add_task('deploy:safe', function () {
 - Skip rollback monitoring
 
 ```php
-// Rollback configuration
+// Rollback configuration — rollback is a Deployer built-in (`dep rollback`);
+// keep enough releases to roll back to:
 klytron_configure_app('my-app', 'git@github.com:user/my-app.git', [
-    'rollback_enabled' => true,
-    'rollback_automatic' => true,
-    'rollback_notification' => true,
+    'keep_releases' => 5,
 ]);
 ```
 

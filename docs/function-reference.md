@@ -54,7 +54,7 @@ Configure project type and capabilities.
 
 ```php
 klytron_configure_project([
-    'type' => 'laravel',                   // Project type: laravel, yii2, simple-php
+    'type' => 'laravel',                   // Project type: laravel, yii2, php
     'database' => 'mysql',                 // Database type: mysql, sqlite, postgresql, none
     'env_file_local' => '.env.production', // Local environment file
     'env_file_remote' => '.env',           // Remote environment file
@@ -142,7 +142,7 @@ klytron_configure_host('your-server.com', [
 ]);
 ```
 
-#### `klytron_configure_host_from_env(string $envVar = 'DEPLOY_HOST', string $defaultHost = 'localhost', array $config = [])`
+#### `klytron_configure_host_from_env(string $envVar = 'DEPLOY_HOST', ?string $fallback = null, array $config = [])`
 Configure host dynamically from environment variables, avoiding hardcoded server credentials in your code repository.
 
 ```php
@@ -340,33 +340,26 @@ Configure database settings for the application.
 - `$type` (string) - Database type: 'mysql', 'postgresql', 'sqlite', 'none'
 - `$config` (array) - Database configuration options
 
-**Configuration Options:**
-- `host` (string) - Database host
-- `port` (int) - Database port
-- `database` (string) - Database name
-- `username` (string) - Database username
-- `password` (string) - Database password
-- `charset` (string) - Database charset
-- `backup_enabled` (bool) - Enable database backups
-- `backup_compress` (bool) - Compress database backups
-- `backup_options` (array) - Additional backup options
+**Configuration Options** (real keys — anything else is ignored):
+- `import_path` (string) - Directory of live DB exports used by import tasks
+- `supports_migrations` (bool) - Whether migration tasks should run
+- `supports_seeders` (bool) - Whether seeder tasks should run
 
 **Example:**
 ```php
 klytron_configure_database('mysql', [
-    'host' => 'localhost',
-    'port' => 3306,
-    'database' => 'myapp',
-    'username' => 'dbuser',
-    'password' => 'dbpass',
-    'charset' => 'utf8mb4',
-    'backup_enabled' => true,
-    'backup_compress' => true,
-    'backup_options' => [
-        'include_tables' => ['users', 'posts'],
-        'exclude_tables' => ['temp_*'],
-    ],
+    'import_path' => 'database/live-db-exports',
+    'supports_migrations' => true,
+    'supports_seeders' => true,
 ]);
+
+// Database credentials for dumps are plain Deployer config (note `db_pass`):
+set('db_host', 'localhost');
+set('db_port', '3306');
+set('db_name', 'myapp');
+set('db_user', 'dbuser');
+set('db_pass', 'dbpass');
+```
 ```
 
 ## ⚙️ Project Configuration
@@ -506,7 +499,7 @@ klytron_set_paths('/var/www', '/var/www/html');
 klytron_set_php_version('php8.3');
 
 klytron_configure_project([
-    'type' => 'simple-php',
+    'type' => 'php',
     'database' => 'none',
 ]);
 
@@ -527,10 +520,10 @@ task('deploy', klytron_deploy_flow())->desc('Deploy project');
 ```
 
 The flow executes the following tasks in order:
-1. `deploy:start_timer`
+1. `klytron:deploy:start_timer`
 2. `klytron:validate:basic`
 3. `deploy:unlock`
-4. `deploy:fix_repo`
+4. `klytron:deploy:fix_repo`
 5. `klytron:deploy:prepare:complete`
 6. `deploy:setup`
 7. `deploy:lock`
@@ -546,7 +539,7 @@ The flow executes the following tasks in order:
 17. `deploy:unlock`
 18. `deploy:cleanup`
 19. `klytron:deploy:notify:complete`
-20. `deploy:end_timer`
+20. `klytron:deploy:end_timer`
 
 ### `klytron_deploy_flow_minimal(): array`
 *(Deprecated)* Alias for `klytron_deploy_flow()`. Use `klytron_deploy_flow()` directly.
@@ -581,19 +574,17 @@ klytron_configure_project([
     'supports_storage_link' => true,
 ]);
 
-// Configure database
+// Configure database (real signature: string $type first)
 klytron_configure_database('mysql', [
-    'host' => 'localhost',
-    'database' => 'myapp',
-    'username' => 'dbuser',
-    'password' => 'dbpass',
+    'import_path' => 'database/live-db-exports',
+    'supports_migrations' => true,
+    'supports_seeders' => true,
 ]);
 
 // Configure host
 klytron_configure_host('myapp.com', [
     'remote_user' => 'deploy',
     'http_user' => 'www-data',
-    'ssh_multiplexing' => true,
 ]);
 
 // Configure shared files and directories
@@ -614,18 +605,16 @@ klytron_configure_app('my-api', 'git@github.com:user/my-api.git');
 
 // Configure for API project
 klytron_configure_project([
-    'type' => 'laravel-api',
+    'type' => 'laravel',
     'database' => 'postgresql',
     'supports_passport' => true,
-    'supports_rate_limiting' => true,
 ]);
 
-// Configure database
+// Configure database (real signature: string $type first)
 klytron_configure_database('postgresql', [
-    'host' => 'localhost',
-    'database' => 'myapi',
-    'username' => 'apiuser',
-    'password' => 'apipass',
+    'import_path' => 'database/live-db-exports',
+    'supports_migrations' => true,
+    'supports_seeders' => true,
 ]);
 
 // Configure host
@@ -646,7 +635,7 @@ klytron_configure_app('my-php-app', 'git@github.com:user/my-php-app.git');
 
 // Configure for simple PHP project
 klytron_configure_project([
-    'type' => 'simple-php',
+    'type' => 'php',
     'database' => 'none',
 ]);
 

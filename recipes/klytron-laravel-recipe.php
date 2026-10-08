@@ -1659,11 +1659,11 @@ function klytron_laravel_deploy_flow(): array {
         'deploy:setup',
         'deploy:lock',
         'deploy:release',
-        'deploy:fix_repo',                              // Fix repo issues BEFORE code update
+        'klytron:deploy:fix_repo',                              // Fix repo issues BEFORE code update
         'deploy:update_code',
         'deploy:shared',
         'klytron:laravel:deploy:environment:complete',   // Group task: env upload + deployment
-        'deploy:env',
+        'klytron:deploy:env',
         'deploy:vendors',
         'klytron:laravel:node:vite:build:local',
         'klytron:laravel:filament:assets',               // Publish Filament v4/v5 vendor assets (pre-symlink)
@@ -1678,7 +1678,7 @@ function klytron_laravel_deploy_flow(): array {
         'klytron:deploy:access_permissions',             // Final permissions fix
         'klytron:laravel:deploy:notify:complete',        // Group task: success message + notification
         'klytron:laravel:backup:post_deploy',            // Post-deployment backup restoration (optional)
-        'deploy:end_timer',
+        'klytron:deploy:end_timer',
     ];
 }
 
@@ -1698,7 +1698,7 @@ function klytron_laravel_deploy_flow_minimal(): array {
         'deploy:update_code',
         'deploy:shared',
         'klytron:upload:env:production',
-        'deploy:env',
+        'klytron:deploy:env',
         'deploy:vendors',
         'klytron:laravel:deploy:cache:clear:all',
         'deploy:writable',
@@ -1708,7 +1708,7 @@ function klytron_laravel_deploy_flow_minimal(): array {
         'deploy:unlock',
         'deploy:cleanup',
         'klytron:laravel:notify:done',
-        'deploy:end_timer',
+        'klytron:deploy:end_timer',
     ];
 }
 
@@ -1725,11 +1725,11 @@ function klytron_laravel_deploy_flow_api(): array {
         'deploy:setup',
         'deploy:lock',
         'deploy:release',
-        'deploy:fix_repo',                              // Fix repo issues BEFORE code update
+        'klytron:deploy:fix_repo',                              // Fix repo issues BEFORE code update
         'deploy:update_code',
         'deploy:shared',
         'klytron:laravel:deploy:environment:complete',
-        'deploy:env',
+        'klytron:deploy:env',
         'deploy:vendors',
         // Skip Vite build for API-only projects
         'klytron:laravel:deploy:database:complete',
@@ -1742,7 +1742,7 @@ function klytron_laravel_deploy_flow_api(): array {
         'deploy:cleanup',
         'klytron:deploy:access_permissions',
         'klytron:laravel:deploy:notify:complete',
-        'deploy:end_timer',
+        'klytron:deploy:end_timer',
     ];
 }
 

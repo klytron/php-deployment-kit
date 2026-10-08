@@ -833,10 +833,10 @@ if (!get('klytron_deployer_loaded', false)) {
      */
     function klytron_deploy_flow(): array {
         return [
-            'deploy:start_timer',
+            'klytron:deploy:start_timer',
             'klytron:validate:basic',                    // Framework-agnostic validation
             'deploy:unlock',
-            'deploy:fix_repo',
+            'klytron:deploy:fix_repo',
             'klytron:deploy:prepare:complete',           // Framework-agnostic preparation
             'deploy:setup',
             'deploy:lock',
@@ -844,7 +844,7 @@ if (!get('klytron_deployer_loaded', false)) {
             'deploy:update_code',
             'deploy:shared',
             'klytron:deploy:environment:complete',       // Framework-agnostic env deployment
-            'deploy:env',
+            'klytron:deploy:env',
             'deploy:vendors',
             'deploy:writable',
             'deploy:symlink',
@@ -852,7 +852,7 @@ if (!get('klytron_deployer_loaded', false)) {
             'deploy:unlock',
             'deploy:cleanup',
             'klytron:deploy:notify:complete',            // Framework-agnostic success notification
-            'deploy:end_timer',
+            'klytron:deploy:end_timer',
         ];
     }
 

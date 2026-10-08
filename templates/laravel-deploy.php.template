@@ -68,6 +68,8 @@ klytron_configure_project([
     'cleanup_assets'     => true,  // true = problematic .htaccess files cleaned
     'optimize_images'    => false, // true = images compressed post-deploy
     'enable_encryption'  => false, // true = LARAVEL_ENV_ENCRYPTION_KEY decryption used
+    // 'env_file_local'  => false, // No env file for this project — skips .env
+    //                              // upload + validation (cron runners, static tooling).
 ]);
 
 // ── Host ──────────────────────────────────────────────────────────────────────
@@ -79,12 +81,40 @@ klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
     'http_user'   => 'www-data', // Web server user (for permissions)
     'http_group'  => 'www-data', // Web server group
     'labels'      => ['stage' => 'production'],
-    'ssh_options' => [
+    'ssh_arguments' => [
         'ConnectTimeout'      => 30,
         'ServerAliveInterval' => 60,
         'ServerAliveCountMax' => 3,
     ],
 ]);
+
+// ── Consumer-derived tasks (optional) ───────────────────────────────────────
+// The kit ships these tasks; they run only when you configure their keys and
+// add them to the deploy flow below. Uncomment what you need:
+//
+// set('domain_env_var', 'APP_URL_DOMAIN');  // + set('domain_env_file', '.env.production');
+//     → task('klytron:set:domain-from-env') reads the domain from your env file
+//       instead of klytron_set_domain() above.
+//
+// set('domain_replace_files', ['{{release_or_current_path}}/public/loader.php']);
+// set('domain_replace_search', 'example.com');
+//     → task('klytron:deploy:replace-tokens') replaces the placeholder string
+//       with the live domain in the configured files.
+//
+// set('required_binaries', ['jpegoptim', 'pngquant']);
+//     → task('klytron:check:binaries') warns (never fails) when server
+//       binaries are missing.
+//
+// set('decrypt_paths', ['{{release_path}}/resources/00-prod-web']);
+//     → task('klytron:laravel:decrypt:paths') runs `artisan file:decrypt`
+//       on each configured path (after .env upload + vendors).
+//
+// set('extra_artisan_commands', ['app:sitemap-generate', 'storage:link-clean']);
+//     → task('klytron:laravel:extra-commands') runs each verbatim
+//       `php artisan <command>` at its flow point (a failure fails the deploy).
+//
+// task('klytron:laravel:check:web-php') warns when the domain web tier serves
+// an older PHP than composer requires — wire it into the flow to enable it.
 
 // ── Shared files & directories ────────────────────────────────────────────────
 // Shared items persist across releases (symlinked into each release).
@@ -151,6 +181,7 @@ task('deploy', [
     'klytron:deploy:start_timer',              // Start deployment timer
     'klytron:validate:basic',                  // Validate deploy path, domain, .env, and placeholders
     'deploy:unlock',                           // Clear any stale deploy lock
+    'klytron:deploy:fix_repo',                 // Clear stale git locks, configure safe.directory
     'klytron:laravel:deploy:prepare:complete', // Confirm deployment + optional backup
 
     // Code update

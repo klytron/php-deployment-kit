@@ -96,10 +96,6 @@ klytron_configure_project([
     'supports_filament' => true,            // Publish Filament v5 assets (php artisan filament:assets)
     'supports_mix' => false,                // Enable Mix support
     'check_git_pushed' => true,             // Abort if unpushed commits exist locally
-    'supports_queue' => false,              // Enable queue support
-    'supports_schedule' => false,           // Enable scheduler support
-    'supports_horizon' => false,            // Enable Horizon support
-    'supports_telescope' => false,          // Enable Telescope support
 ]);
 ```
 
@@ -109,28 +105,26 @@ klytron_configure_project([
 klytron_configure_project([
     'type' => 'laravel',
     'database' => 'mysql',
-    'db_host' => 'localhost',
-    'db_name' => 'myapp',
-    'db_user' => 'root',
-    'db_password' => 'secret',
     'env_file_local' => '.env.production',
     'env_file_remote' => '.env',
     'supports_vite' => true,
     'supports_storage_link' => true,
     'supports_passport' => true,
-    'supports_queue' => true,
-    'supports_schedule' => true,
-    'supports_horizon' => false,
-    'supports_telescope' => false,
-    'artisan_commands' => [
-        'config:cache',
-        'route:cache',
-        'view:cache',
-        'queue:restart',
-    ],
-    'maintenance_mode' => true,
-    'maintenance_message' => 'Deploying...',
-    'maintenance_retry' => 60,
+]);
+
+// Database credentials are plain Deployer config (note `db_pass`), not
+// project flags:
+set('db_host', 'localhost');
+set('db_name', 'myapp');
+set('db_user', 'root');
+set('db_pass', 'secret');
+
+// Extra artisan commands run verbatim via klytron:laravel:extra-commands:
+set('extra_artisan_commands', [
+    'config:cache',
+    'route:cache',
+    'view:cache',
+    'queue:restart',
 ]);
 ```
 
@@ -138,68 +132,67 @@ klytron_configure_project([
 
 ### Available Laravel Tasks
 
-#### `deploy:laravel`
+#### `klytron:laravel:deploy:environment:complete`
 
-Main Laravel deployment task that runs all Laravel-specific operations.
-
-```bash
-vendor/bin/dep deploy:laravel
-```
-
-#### `deploy:laravel:env`
-
-Configure Laravel environment file.
+Upload the Laravel environment file (plus optional decryption).
 
 ```bash
-vendor/bin/dep deploy:laravel:env
+vendor/bin/dep klytron:laravel:deploy:environment:complete
 ```
 
-#### `deploy:laravel:storage`
+#### `klytron:laravel:storage:link`
 
-Configure Laravel storage directories and symlinks.
+Create the Laravel storage symlink.
 
 ```bash
-vendor/bin/dep deploy:laravel:storage
+vendor/bin/dep klytron:laravel:storage:link
 ```
 
-#### `deploy:laravel:cache`
+#### `klytron:laravel:deploy:cache:complete`
 
-Clear and rebuild Laravel caches.
+Clear and rebuild Laravel caches (`cache:clear`, `config:cache`, `optimize`).
 
 ```bash
-vendor/bin/dep deploy:laravel:cache
+vendor/bin/dep klytron:laravel:deploy:cache:complete
 ```
 
-#### `deploy:laravel:migrate`
+#### `klytron:laravel:deploy:db:migrate`
 
 Run Laravel database migrations.
 
 ```bash
-vendor/bin/dep deploy:laravel:migrate
+vendor/bin/dep klytron:laravel:deploy:db:migrate
 ```
 
-#### `deploy:laravel:seed`
+#### Seeders
 
-Run Laravel database seeders.
+There is no standalone seeder task — run seeders through the
+consumer-derived extra-commands task:
+
+```php
+set('extra_artisan_commands', ['db:seed --force']);
+```
 
 ```bash
-vendor/bin/dep deploy:laravel:seed
+vendor/bin/dep klytron:laravel:extra-commands
 ```
 
-#### `deploy:laravel:passport`
+#### `klytron:laravel:deploy:passport:install`
 
 Configure Laravel Passport OAuth.
 
 ```bash
-vendor/bin/dep deploy:laravel:passport
+vendor/bin/dep klytron:laravel:deploy:passport:install
 ```
 
-#### `deploy:laravel:optimize`
+#### `klytron:laravel:deploy:cache:complete` (optimize)
 
-Optimize Laravel application.
+Application optimization (`artisan:optimize` from Deployer's core Laravel
+recipe) runs inside the cache task above — there is no separate optimize
+task.
 
 ```bash
-vendor/bin/dep deploy:laravel:optimize
+vendor/bin/dep klytron:laravel:deploy:cache:complete
 ```
 
 ## 🎯 Laravel Environment Configuration
@@ -207,11 +200,10 @@ vendor/bin/dep deploy:laravel:optimize
 ### Environment File Setup
 
 ```php
-// Configure environment files
+// Configure environment files (real keys only)
 klytron_configure_project([
     'env_file_local' => '.env.production',
     'env_file_remote' => '.env',
-    'env_backup_enabled' => true,
 ]);
 
 // Configure shared files to include .env
@@ -227,13 +219,13 @@ Set Laravel-specific environment variables:
 
 ```php
 // Set Laravel environment variables
-klytron_set_env('APP_ENV', 'production');
-klytron_set_env('APP_DEBUG', 'false');
-klytron_set_env('APP_URL', 'https://myapp.com');
-klytron_set_env('LOG_CHANNEL', 'stack');
-klytron_set_env('CACHE_DRIVER', 'redis');
-klytron_set_env('SESSION_DRIVER', 'redis');
-klytron_set_env('QUEUE_CONNECTION', 'redis');
+set('APP_ENV', 'production');
+set('APP_DEBUG', 'false');
+set('APP_URL', 'https://myapp.com');
+set('LOG_CHANNEL', 'stack');
+set('CACHE_DRIVER', 'redis');
+set('SESSION_DRIVER', 'redis');
+set('QUEUE_CONNECTION', 'redis');
 ```
 
 ## 🎯 Laravel Database Management
@@ -241,17 +233,19 @@ klytron_set_env('QUEUE_CONNECTION', 'redis');
 ### Database Configuration
 
 ```php
-// Configure database
-klytron_configure_project([
-    'database' => 'mysql',
-    'db_host' => 'localhost',
-    'db_port' => 3306,
-    'db_name' => 'myapp',
-    'db_user' => 'root',
-    'db_password' => 'secret',
-    'db_charset' => 'utf8mb4',
-    'db_collation' => 'utf8mb4_unicode_ci',
+// Configure database (real signature: string $type first, then options)
+klytron_configure_database('mysql', [
+    'import_path' => 'database/live-db-exports',
+    'supports_migrations' => true,
+    'supports_seeders' => true,
 ]);
+
+// Credentials for dumps are plain Deployer config (note `db_pass`):
+set('db_host', 'localhost');
+set('db_port', 3306);
+set('db_name', 'myapp');
+set('db_user', 'root');
+set('db_pass', 'secret');
 ```
 
 ### Database Migrations
@@ -499,25 +493,19 @@ klytron_configure_writable_dirs([
 ### Cache Configuration
 
 ```php
-// Configure cache settings
-klytron_configure_project([
-    'cache_driver' => 'redis',
-    'session_driver' => 'redis',
-    'queue_connection' => 'redis',
-    'cache_clear_on_deploy' => true,
-]);
+// Cache clearing on deploy is handled by the kit task
+// klytron:laravel:deploy:cache:complete (runs when shouldClearAllCaches is
+// true, the default). Drivers themselves are application config — put them
+// in your .env file (CACHE_DRIVER=redis, SESSION_DRIVER=redis).
+set('shouldClearAllCaches', true);
 ```
 
 ### Cache Optimization
 
 ```php
-// Configure cache optimization
-klytron_configure_project([
-    'cache_optimization' => true,
-    'config_cache' => true,
-    'route_cache' => true,
-    'view_cache' => true,
-]);
+// Cache optimization runs inside klytron:laravel:deploy:cache:complete
+// (config:cache + optimize). No kit flags are needed — wire that task into
+// your deploy flow (see quick-start.md).
 ```
 
 ## 🎯 Laravel Queue Management
@@ -525,25 +513,19 @@ klytron_configure_project([
 ### Queue Configuration
 
 ```php
-// Configure queue support
-klytron_configure_project([
-    'supports_queue' => true,
-    'queue_connection' => 'redis',
-    'queue_restart_on_deploy' => true,
-    'queue_workers' => 2,
-]);
+// Queue workers are application config, not kit flags. Restart workers
+// through the consumer-derived extra-commands task:
+set('extra_artisan_commands', ['queue:restart']);
 ```
 
 ### Queue Workers
 
 ```php
 // Configure queue workers
-klytron_add_task('deploy:laravel:queue', function () {
+task('deploy:laravel:queue', function () {
     run('php artisan queue:restart');
     run('php artisan queue:work --daemon --sleep=3 --tries=3');
-}, [
-    'description' => 'Restart Laravel queue workers',
-]);
+})->desc('Restart Laravel queue workers');
 ```
 
 ## 🎯 Laravel Passport Configuration
@@ -554,7 +536,6 @@ klytron_add_task('deploy:laravel:queue', function () {
 // Configure Passport support
 klytron_configure_project([
     'supports_passport' => true,
-    'passport_keys_path' => 'storage/oauth-*.key',
 ]);
 
 // Configure shared files for Passport keys
@@ -569,11 +550,9 @@ klytron_configure_shared_files([
 
 ```php
 // Add Passport installation task
-klytron_add_task('deploy:laravel:passport_install', function () {
+task('deploy:laravel:passport_install', function () {
     run('php artisan passport:install');
-}, [
-    'description' => 'Install Laravel Passport',
-]);
+})->desc('Install Laravel Passport');
 ```
 
 ## 🎯 Laravel Maintenance Mode
@@ -581,32 +560,25 @@ klytron_add_task('deploy:laravel:passport_install', function () {
 ### Maintenance Mode Configuration
 
 ```php
-// Configure maintenance mode
-klytron_configure_project([
-    'maintenance_mode' => true,
-    'maintenance_message' => 'Deploying...',
-    'maintenance_retry' => 60,
-    'maintenance_secret' => 'secret-token',
-]);
+// Maintenance mode has no kit flags — store your own values with set()
+// (read by the custom tasks below via get() with defaults):
+set('maintenance_message', 'Deploying...');
+set('maintenance_retry', 60);
 ```
 
 ### Maintenance Mode Tasks
 
 ```php
 // Add maintenance mode tasks
-klytron_add_task('deploy:laravel:maintenance_on', function () {
+task('deploy:laravel:maintenance_on', function () {
     $message = get('maintenance_message', 'Deploying...');
     $retry = get('maintenance_retry', 60);
     run("php artisan down --message='{$message}' --retry={$retry}");
-}, [
-    'description' => 'Enable Laravel maintenance mode',
-]);
+})->desc('Enable Laravel maintenance mode');
 
-klytron_add_task('deploy:laravel:maintenance_off', function () {
+task('deploy:laravel:maintenance_off', function () {
     run('php artisan up');
-}, [
-    'description' => 'Disable Laravel maintenance mode',
-]);
+})->desc('Disable Laravel maintenance mode');
 ```
 
 ## 🎯 Laravel Optimization
@@ -614,28 +586,21 @@ klytron_add_task('deploy:laravel:maintenance_off', function () {
 ### Application Optimization
 
 ```php
-// Configure Laravel optimization
-klytron_configure_project([
-    'laravel_optimization' => true,
-    'optimize_autoloader' => true,
-    'optimize_config' => true,
-    'optimize_routes' => true,
-    'optimize_views' => true,
-]);
+// Application optimization runs inside klytron:laravel:deploy:cache:complete
+// (cache:clear + config:cache + optimize). No kit flags are needed — wire
+// that task into your deploy flow (see quick-start.md).
 ```
 
 ### Performance Optimization
 
 ```php
 // Add optimization tasks
-klytron_add_task('deploy:laravel:optimize', function () {
+task('deploy:laravel:optimize', function () {
     run('php artisan config:cache');
     run('php artisan route:cache');
     run('php artisan view:cache');
     run('composer dump-autoload --optimize');
-}, [
-    'description' => 'Optimize Laravel application',
-]);
+})->desc('Optimize Laravel application');
 ```
 
 ## 🎯 Laravel Health Checks
@@ -644,7 +609,7 @@ klytron_add_task('deploy:laravel:optimize', function () {
 
 ```php
 // Add Laravel health checks
-klytron_add_task('deploy:laravel:health_check', function () {
+task('deploy:laravel:health_check', function () {
     $healthChecks = [
         'Application accessible' => 'curl -f http://localhost/health || exit 1',
         'Database connection' => 'php artisan db:monitor',
@@ -663,9 +628,7 @@ klytron_add_task('deploy:laravel:health_check', function () {
             throw $e;
         }
     }
-}, [
-    'description' => 'Run Laravel health checks',
-]);
+})->desc('Run Laravel health checks');
 ```
 
 ## 🎯 Laravel Deployment Examples
@@ -709,22 +672,20 @@ klytron_set_domain('myapp.com');
 klytron_configure_project([
     'type' => 'laravel',
     'database' => 'mysql',
-    'db_host' => 'localhost',
-    'db_name' => 'myapp',
-    'db_user' => 'root',
-    'db_password' => 'secret',
     'env_file_local' => '.env.production',
     'env_file_remote' => '.env',
     'supports_vite' => true,
     'supports_storage_link' => true,
     'supports_passport' => true,
-    'supports_queue' => true,
-    'supports_schedule' => true,
-    'maintenance_mode' => true,
-    'cache_driver' => 'redis',
-    'session_driver' => 'redis',
-    'queue_connection' => 'redis',
 ]);
+
+// Database credentials are plain Deployer config (note `db_pass`), not
+// project flags. Cache/queue drivers are application config — put them in
+// your .env file (CACHE_DRIVER=redis, QUEUE_CONNECTION=redis).
+set('db_host', 'localhost');
+set('db_name', 'myapp');
+set('db_user', 'root');
+set('db_pass', 'secret');
 
 klytron_configure_host('myapp.com', [
     'remote_user' => 'root',
@@ -766,18 +727,21 @@ klytron_set_paths('/var/www', '/var/www/html');
 klytron_set_domain('api.myapp.com');
 
 klytron_configure_project([
-    'type' => 'laravel-api',
+    'type' => 'laravel',
     'database' => 'postgresql',
-    'db_host' => 'localhost',
-    'db_name' => 'myapp_api',
-    'db_user' => 'postgres',
-    'db_password' => 'secret',
+    'env_file_local' => '.env.production',
+    'env_file_remote' => '.env',
     'supports_passport' => true,
-    'supports_rate_limiting' => true,
-    'supports_api_docs' => true,
-    'cache_driver' => 'redis',
-    'session_driver' => 'redis',
+    'supports_vite' => false,
 ]);
+
+// Database credentials are plain Deployer config (note `db_pass`), not
+// project flags. Cache/session drivers are application config — put them in
+// your .env file.
+set('db_host', 'localhost');
+set('db_name', 'myapp_api');
+set('db_user', 'postgres');
+set('db_pass', 'secret');
 
 klytron_configure_host('api.myapp.com', [
     'remote_user' => 'root',

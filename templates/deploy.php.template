@@ -58,12 +58,29 @@ klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
     'http_user'   => 'www-data', // Web server user (for permissions)
     'http_group'  => 'www-data', // Web server group
     'labels'      => ['stage' => 'production'],
-    'ssh_options' => [
+    'ssh_arguments' => [
         'ConnectTimeout'      => 30,
         'ServerAliveInterval' => 60,
         'ServerAliveCountMax' => 3,
     ],
 ]);
+
+// ── Consumer-derived tasks (optional) ───────────────────────────────────────
+// The kit ships these generic tasks; they run only when you configure their
+// keys and add them to the deploy flow below. Uncomment what you need:
+//
+// set('domain_env_var', 'APP_URL_DOMAIN');  // + set('domain_env_file', '.env.production');
+//     → task('klytron:set:domain-from-env') reads the domain from your env file
+//       instead of klytron_set_domain() above.
+//
+// set('domain_replace_files', ['{{release_or_current_path}}/public/loader.php']);
+// set('domain_replace_search', 'example.com');
+//     → task('klytron:deploy:replace-tokens') replaces the placeholder string
+//       with the live domain in the configured files.
+//
+// set('required_binaries', ['jpegoptim', 'pngquant']);
+//     → task('klytron:check:binaries') warns (never fails) when server
+//       binaries are missing.
 
 // ── Project capabilities ──────────────────────────────────────────────────────
 // The package skips tasks whose flags are false/none automatically.
@@ -80,6 +97,8 @@ klytron_configure_project([
     'cleanup_assets'     => false,
     'optimize_images'    => false,
     'enable_encryption'  => false,
+    // 'env_file_local'  => false, // No env file for this project — skips .env
+    //                              // upload + validation (cron runners, static tooling).
 ]);
 
 // ── Shared files & dirs ───────────────────────────────────────────────────────
@@ -128,6 +147,7 @@ task('deploy', [
     'klytron:deploy:start_timer',      // Start deployment timer
     'klytron:validate:basic',          // Validate paths, domain, .env, and placeholders
     'deploy:unlock',                   // Clear any stale deploy lock
+    'klytron:deploy:fix_repo',          // Clear stale git locks, configure safe.directory
     'deploy:setup',                    // Create directory structure on server
     'deploy:lock',                     // Write deploy.lock
     'deploy:release',                  // Create new release directory

@@ -43,13 +43,12 @@ klytron_configure_app('my-api', 'git@github.com:user/my-api.git');
 // Set deployment paths
 klytron_set_paths('/var/www', '/var/www/html');
 
-// Configure API project
+// Configure API project (Laravel recipe handles APIs — type stays 'laravel')
 klytron_configure_project([
-    'type' => 'laravel-api',
+    'type' => 'laravel',
     'database' => 'postgresql',
     'supports_passport' => true,
-    'supports_rate_limiting' => true,
-    'supports_cors' => true,
+    'supports_vite' => false,
 ]);
 
 // Configure host
@@ -72,115 +71,92 @@ vendor/bin/dep deploy
 
 ```php
 klytron_configure_project([
-    'type' => 'laravel-api',                // API project type
-    'database' => 'postgresql',             // Database type
-    'supports_passport' => true,            // Enable Passport OAuth
-    'supports_rate_limiting' => true,       // Enable rate limiting
-    'supports_cors' => true,                // Enable CORS support
-    'supports_api_docs' => true,            // Enable API documentation
-    'supports_oauth' => true,               // Enable OAuth support
-    'api_version' => 'v1',                  // API version
-    'api_prefix' => 'api',                  // API route prefix
+    'type' => 'laravel',                // Laravel recipe also serves APIs
+    'database' => 'postgresql',         // Database type
+    'env_file_local' => '.env.production',
+    'env_file_remote' => '.env',
+    'supports_passport' => true,        // Enable Passport OAuth
+    'supports_vite' => false,           // APIs usually skip frontend builds
 ]);
+// Rate limiting, CORS, versioning and docs are application config
+// (Laravel middleware / packages), not kit flags — configure them in your
+// codebase and .env file.
 ```
 
 ### Advanced API Configuration
 
 ```php
 klytron_configure_project([
-    'type' => 'laravel-api',
+    'type' => 'laravel',
     'database' => 'postgresql',
-    'db_host' => 'localhost',
-    'db_name' => 'myapi',
-    'db_user' => 'postgres',
-    'db_password' => 'secret',
+    'env_file_local' => '.env.production',
+    'env_file_remote' => '.env',
     'supports_passport' => true,
-    'supports_rate_limiting' => true,
-    'supports_cors' => true,
-    'supports_api_docs' => true,
-    'api_version' => 'v1',
-    'api_prefix' => 'api',
-    'rate_limit_requests' => 60,
-    'rate_limit_minutes' => 1,
-    'cors_origins' => ['https://myapp.com', 'https://admin.myapp.com'],
-    'security_headers' => true,
-    'response_caching' => true,
-    'api_monitoring' => true,
+    'supports_vite' => false,
 ]);
+// Database credentials are plain Deployer config (note `db_pass`), not
+// project flags:
+set('db_host', 'localhost');
+set('db_name', 'myapi');
+set('db_user', 'postgres');
+set('db_pass', 'secret');
+// Rate limiting, CORS, docs and monitoring are application config —
+// configure them in your codebase and .env file, not in kit config.
 ```
 
 ## 🎯 API-Specific Tasks
 
 ### Available API Tasks
 
-#### `deploy:api`
+APIs deploy with the standard Laravel pipeline (see quick-start.md) — there
+are no `deploy:api*` tasks in this package. The kit tasks that matter most
+for APIs are:
 
-Main API deployment task that runs all API-specific operations.
-
-```bash
-vendor/bin/dep deploy:api
-```
-
-#### `deploy:api:passport`
+#### `klytron:laravel:deploy:passport:install`
 
 Configure Laravel Passport for API authentication.
 
 ```bash
-vendor/bin/dep deploy:api:passport
+vendor/bin/dep klytron:laravel:deploy:passport:install
 ```
 
-#### `deploy:api:rate_limiting`
+#### `klytron:laravel:deploy:database:complete`
 
-Configure API rate limiting.
+Run migrations and/or database imports.
 
 ```bash
-vendor/bin/dep deploy:api:rate_limiting
+vendor/bin/dep klytron:laravel:deploy:database:complete
 ```
 
-#### `deploy:api:cors`
+#### `klytron:laravel:deploy:cache:complete`
 
-Configure CORS for API endpoints.
+Clear and rebuild caches (`cache:clear`, `config:cache`, `optimize`).
 
 ```bash
-vendor/bin/dep deploy:api:cors
+vendor/bin/dep klytron:laravel:deploy:cache:complete
 ```
 
-#### `deploy:api:docs`
+#### `klytron:deploy:health_check`
 
-Generate API documentation.
+Verify the API responds over HTTP after deploy.
 
 ```bash
-vendor/bin/dep deploy:api:docs
+vendor/bin/dep klytron:deploy:health_check
 ```
 
-#### `deploy:api:health`
-
-Configure API health check endpoints.
-
-```bash
-vendor/bin/dep deploy:api:health
-```
-
-#### `deploy:api:security`
-
-Configure API security headers and settings.
-
-```bash
-vendor/bin/dep deploy:api:security
-```
+Rate limiting, CORS, docs, security headers and monitoring are application
+concerns (middleware / packages in your codebase), not deployment tasks —
+the custom `task('deploy:api:*', ...)` examples further below are
+per-project starting points you own.
 
 ## 🎯 API Authentication (Passport)
 
 ### Passport Configuration
 
 ```php
-// Configure Passport support
+// Configure Passport support (real kit flag)
 klytron_configure_project([
     'supports_passport' => true,
-    'passport_keys_path' => 'storage/oauth-*.key',
-    'passport_personal_access' => true,
-    'passport_password_grant' => true,
-    'passport_client_credentials' => true,
 ]);
 
 // Configure shared files for Passport keys
@@ -195,20 +171,16 @@ klytron_configure_shared_files([
 
 ```php
 // Add Passport installation tasks
-klytron_add_task('deploy:api:passport_install', function () {
+task('deploy:api:passport_install', function () {
     run('php artisan passport:install');
     run('php artisan passport:keys');
-}, [
-    'description' => 'Install Laravel Passport',
-]);
+})->desc('Install Laravel Passport');
 
-klytron_add_task('deploy:api:passport_clients', function () {
+task('deploy:api:passport_clients', function () {
     // Create OAuth clients
     run('php artisan passport:client --name="Web App" --redirect_uri="https://myapp.com/callback"');
     run('php artisan passport:client --name="Mobile App" --redirect_uri="myapp://callback" --personal');
-}, [
-    'description' => 'Create Passport OAuth clients',
-]);
+})->desc('Create Passport OAuth clients');
 ```
 
 ## 🎯 API Rate Limiting
@@ -216,22 +188,17 @@ klytron_add_task('deploy:api:passport_clients', function () {
 ### Rate Limiting Configuration
 
 ```php
-// Configure rate limiting
-klytron_configure_project([
-    'supports_rate_limiting' => true,
-    'rate_limit_requests' => 60,
-    'rate_limit_minutes' => 1,
-    'rate_limit_headers' => true,
-    'rate_limit_by_user' => true,
-    'rate_limit_by_ip' => true,
-]);
+// Rate-limit values are read by the custom task below via get() — store
+// them with set() (klytron_configure_project() would drop unknown keys):
+set('rate_limit_requests', 60);
+set('rate_limit_minutes', 1);
 ```
 
 ### Rate Limiting Tasks
 
 ```php
 // Add rate limiting configuration task
-klytron_add_task('deploy:api:configure_rate_limiting', function () {
+task('deploy:api:configure_rate_limiting', function () {
     $requests = get('rate_limit_requests', 60);
     $minutes = get('rate_limit_minutes', 1);
     
@@ -241,9 +208,7 @@ klytron_add_task('deploy:api:configure_rate_limiting', function () {
     
     // Clear config cache
     run('php artisan config:clear');
-}, [
-    'description' => 'Configure API rate limiting',
-]);
+})->desc('Configure API rate limiting');
 ```
 
 ## 🎯 CORS Configuration
@@ -251,22 +216,16 @@ klytron_add_task('deploy:api:configure_rate_limiting', function () {
 ### CORS Setup
 
 ```php
-// Configure CORS support
-klytron_configure_project([
-    'supports_cors' => true,
-    'cors_origins' => ['https://myapp.com', 'https://admin.myapp.com'],
-    'cors_methods' => ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    'cors_headers' => ['Content-Type', 'Authorization', 'X-Requested-With'],
-    'cors_credentials' => true,
-    'cors_max_age' => 86400,
-]);
+// CORS values are read by the custom task below via get() — store them
+// with set():
+set('cors_origins', ['https://myapp.com', 'https://admin.myapp.com']);
 ```
 
 ### CORS Configuration Task
 
 ```php
 // Add CORS configuration task
-klytron_add_task('deploy:api:configure_cors', function () {
+task('deploy:api:configure_cors', function () {
     $origins = get('cors_origins', ['*']);
     $methods = get('cors_methods', ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']);
     $headers = get('cors_headers', ['Content-Type', 'Authorization']);
@@ -286,9 +245,7 @@ klytron_add_task('deploy:api:configure_cors', function () {
     // Write CORS configuration
     $configPath = 'config/cors.php';
     // Implementation to write CORS config
-}, [
-    'description' => 'Configure CORS for API',
-]);
+})->desc('Configure CORS for API');
 ```
 
 ## 🎯 API Documentation
@@ -296,21 +253,17 @@ klytron_add_task('deploy:api:configure_cors', function () {
 ### Documentation Configuration
 
 ```php
-// Configure API documentation
-klytron_configure_project([
-    'supports_api_docs' => true,
-    'api_docs_generator' => 'swagger', // or 'l5-swagger', 'scribe'
-    'api_docs_path' => 'docs/api',
-    'api_docs_url' => '/api/docs',
-    'api_docs_auto_generate' => true,
-]);
+// Doc-generator values are read by the custom tasks below via get() —
+// store them with set():
+set('api_docs_generator', 'swagger'); // or 'l5-swagger', 'scribe'
+set('api_docs_path', 'docs/api');
 ```
 
 ### Documentation Generation Tasks
 
 ```php
 // Add API documentation tasks
-klytron_add_task('deploy:api:generate_docs', function () {
+task('deploy:api:generate_docs', function () {
     $generator = get('api_docs_generator', 'swagger');
     
     switch ($generator) {
@@ -323,19 +276,15 @@ klytron_add_task('deploy:api:generate_docs', function () {
         default:
             run('php artisan api:docs');
     }
-}, [
-    'description' => 'Generate API documentation',
-]);
+})->desc('Generate API documentation');
 
-klytron_add_task('deploy:api:publish_docs', function () {
+task('deploy:api:publish_docs', function () {
     $docsPath = get('api_docs_path', 'docs/api');
     $publicPath = 'public/api/docs';
     
     // Publish documentation to public directory
     run("cp -r {$docsPath}/* {$publicPath}/");
-}, [
-    'description' => 'Publish API documentation',
-]);
+})->desc('Publish API documentation');
 ```
 
 ## 🎯 API Health Checks
@@ -344,23 +293,22 @@ klytron_add_task('deploy:api:publish_docs', function () {
 
 ```php
 // Configure API health checks
-klytron_configure_project([
-    'api_health_checks' => true,
-    'health_check_endpoints' => [
-        '/api/health',
-        '/api/health/database',
-        '/api/health/cache',
-        '/api/health/queue',
-    ],
-    'health_check_timeout' => 30,
+// Endpoint lists for the custom health-check tasks below are your own
+// values — store them with set():
+set('health_check_endpoints', [
+    '/api/health',
+    '/api/health/database',
+    '/api/health/cache',
+    '/api/health/queue',
 ]);
+set('health_check_timeout', 30);
 ```
 
 ### Health Check Tasks
 
 ```php
 // Add API health check tasks
-klytron_add_task('deploy:api:health_check', function () {
+task('deploy:api:health_check', function () {
     $endpoints = get('health_check_endpoints', ['/api/health']);
     $timeout = get('health_check_timeout', 30);
     
@@ -374,11 +322,9 @@ klytron_add_task('deploy:api:health_check', function () {
             throw $e;
         }
     }
-}, [
-    'description' => 'Run API health checks',
-]);
+})->desc('Run API health checks');
 
-klytron_add_task('deploy:api:create_health_endpoints', function () {
+task('deploy:api:create_health_endpoints', function () {
     // Create health check routes
     $healthRoutes = "
     Route::get('/health', function () {
@@ -396,9 +342,7 @@ klytron_add_task('deploy:api:create_health_endpoints', function () {
     ";
     
     // Implementation to add health routes
-}, [
-    'description' => 'Create API health check endpoints',
-]);
+})->desc('Create API health check endpoints');
 ```
 
 ## 🎯 API Security
@@ -406,19 +350,14 @@ klytron_add_task('deploy:api:create_health_endpoints', function () {
 ### Security Configuration
 
 ```php
-// Configure API security
-klytron_configure_project([
-    'security_headers' => true,
-    'api_security' => true,
-    'security_headers_config' => [
-        'X-Frame-Options' => 'DENY',
-        'X-Content-Type-Options' => 'nosniff',
-        'X-XSS-Protection' => '1; mode=block',
-        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
-        'Content-Security-Policy' => "default-src 'self'",
-    ],
-    'api_authentication' => true,
-    'api_authorization' => true,
+// Header maps for the custom security tasks below are your own values —
+// store them with set():
+set('security_headers_config', [
+    'X-Frame-Options' => 'DENY',
+    'X-Content-Type-Options' => 'nosniff',
+    'X-XSS-Protection' => '1; mode=block',
+    'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+    'Content-Security-Policy' => "default-src 'self'",
 ]);
 ```
 
@@ -426,7 +365,7 @@ klytron_configure_project([
 
 ```php
 // Add API security tasks
-klytron_add_task('deploy:api:configure_security', function () {
+task('deploy:api:configure_security', function () {
     $headers = get('security_headers_config', []);
     
     // Configure security headers
@@ -436,11 +375,9 @@ klytron_add_task('deploy:api:configure_security', function () {
     
     // Clear config cache
     run('php artisan config:clear');
-}, [
-    'description' => 'Configure API security headers',
-]);
+})->desc('Configure API security headers');
 
-klytron_add_task('deploy:api:validate_security', function () {
+task('deploy:api:validate_security', function () {
     // Validate security configuration
     $securityChecks = [
         'HTTPS enabled' => 'curl -I https://localhost/api/health',
@@ -457,9 +394,7 @@ klytron_add_task('deploy:api:validate_security', function () {
             writeln("<error>✗ {$check} failed</error>");
         }
     }
-}, [
-    'description' => 'Validate API security configuration',
-]);
+})->desc('Validate API security configuration');
 ```
 
 ## 🎯 API Response Caching
@@ -467,21 +402,16 @@ klytron_add_task('deploy:api:validate_security', function () {
 ### Caching Configuration
 
 ```php
-// Configure API response caching
-klytron_configure_project([
-    'response_caching' => true,
-    'cache_driver' => 'redis',
-    'api_cache_ttl' => 3600,
-    'api_cache_tags' => ['api', 'responses'],
-    'cache_warming' => true,
-]);
+// Cache values are read by the custom tasks below via get() — store them
+// with set(). The driver itself is application config (CACHE_DRIVER in .env).
+set('api_cache_ttl', 3600);
 ```
 
 ### Caching Tasks
 
 ```php
 // Add API caching tasks
-klytron_add_task('deploy:api:configure_caching', function () {
+task('deploy:api:configure_caching', function () {
     $ttl = get('api_cache_ttl', 3600);
     $driver = get('cache_driver', 'redis');
     
@@ -491,11 +421,9 @@ klytron_add_task('deploy:api:configure_caching', function () {
     
     // Clear cache
     run('php artisan cache:clear');
-}, [
-    'description' => 'Configure API response caching',
-]);
+})->desc('Configure API response caching');
 
-klytron_add_task('deploy:api:warm_cache', function () {
+task('deploy:api:warm_cache', function () {
     if (get('cache_warming', false)) {
         writeln('<info>Warming API cache...</info>');
         
@@ -512,9 +440,7 @@ klytron_add_task('deploy:api:warm_cache', function () {
         
         writeln('<info>Cache warming completed</info>');
     }
-}, [
-    'description' => 'Warm API response cache',
-]);
+})->desc('Warm API response cache');
 ```
 
 ## 🎯 API Monitoring
@@ -522,16 +448,12 @@ klytron_add_task('deploy:api:warm_cache', function () {
 ### Monitoring Configuration
 
 ```php
-// Configure API monitoring
-klytron_configure_project([
-    'api_monitoring' => true,
-    'monitoring_endpoints' => [
-        '/api/metrics',
-        '/api/status',
-        '/api/performance',
-    ],
-    'monitoring_interval' => 60,
-    'performance_tracking' => true,
+// Endpoint lists for the custom monitoring tasks below are your own values —
+// store them with set():
+set('monitoring_endpoints', [
+    '/api/metrics',
+    '/api/status',
+    '/api/performance',
 ]);
 ```
 
@@ -539,7 +461,7 @@ klytron_configure_project([
 
 ```php
 // Add API monitoring tasks
-klytron_add_task('deploy:api:setup_monitoring', function () {
+task('deploy:api:setup_monitoring', function () {
     // Setup monitoring endpoints
     $monitoringRoutes = "
     Route::get('/metrics', function () {
@@ -552,11 +474,9 @@ klytron_add_task('deploy:api:setup_monitoring', function () {
     ";
     
     // Implementation to add monitoring routes
-}, [
-    'description' => 'Setup API monitoring endpoints',
-]);
+})->desc('Setup API monitoring endpoints');
 
-klytron_add_task('deploy:api:test_performance', function () {
+task('deploy:api:test_performance', function () {
     if (get('performance_tracking', false)) {
         writeln('<info>Testing API performance...</info>');
         
@@ -572,9 +492,7 @@ klytron_add_task('deploy:api:test_performance', function () {
             writeln("<info>✓ {$endpoint}: {$time}ms</info>");
         }
     }
-}, [
-    'description' => 'Test API performance',
-]);
+})->desc('Test API performance');
 ```
 
 ## 🎯 API Deployment Examples
@@ -592,11 +510,12 @@ klytron_set_paths('/var/www', '/var/www/html');
 klytron_set_domain('api.myapp.com');
 
 klytron_configure_project([
-    'type' => 'laravel-api',
+    'type' => 'laravel',
     'database' => 'postgresql',
+    'env_file_local' => '.env.production',
+    'env_file_remote' => '.env',
     'supports_passport' => true,
-    'supports_rate_limiting' => true,
-    'supports_cors' => true,
+    'supports_vite' => false,
 ]);
 
 klytron_configure_host('api.myapp.com', [
@@ -618,27 +537,19 @@ klytron_set_paths('/var/www', '/var/www/html');
 klytron_set_domain('api.myapp.com');
 
 klytron_configure_project([
-    'type' => 'laravel-api',
+    'type' => 'laravel',
     'database' => 'postgresql',
-    'db_host' => 'localhost',
-    'db_name' => 'myapi',
-    'db_user' => 'postgres',
-    'db_password' => 'secret',
+    'env_file_local' => '.env.production',
+    'env_file_remote' => '.env',
     'supports_passport' => true,
-    'supports_rate_limiting' => true,
-    'supports_cors' => true,
-    'supports_api_docs' => true,
-    'api_version' => 'v1',
-    'api_prefix' => 'api',
-    'rate_limit_requests' => 60,
-    'rate_limit_minutes' => 1,
-    'cors_origins' => ['https://myapp.com', 'https://admin.myapp.com'],
-    'security_headers' => true,
-    'response_caching' => true,
-    'api_monitoring' => true,
-    'cache_driver' => 'redis',
-    'session_driver' => 'redis',
+    'supports_vite' => false,
 ]);
+// Database credentials are plain Deployer config (note `db_pass`), not
+// project flags:
+set('db_host', 'localhost');
+set('db_name', 'myapi');
+set('db_user', 'postgres');
+set('db_pass', 'secret');
 
 klytron_configure_host('api.myapp.com', [
     'remote_user' => 'root',
@@ -678,16 +589,15 @@ klytron_set_paths('/var/www', '/var/www/html');
 klytron_set_domain('graphql.myapp.com');
 
 klytron_configure_project([
-    'type' => 'laravel-api',
+    'type' => 'laravel',
     'database' => 'postgresql',
+    'env_file_local' => '.env.production',
+    'env_file_remote' => '.env',
     'supports_passport' => true,
-    'supports_rate_limiting' => true,
-    'supports_cors' => true,
-    'api_type' => 'graphql',
-    'graphql_endpoint' => '/graphql',
-    'graphql_playground' => true,
-    'graphql_introspection' => true,
+    'supports_vite' => false,
 ]);
+// GraphQL endpoint/playground settings are application config — configure
+// them in your codebase and .env file, not in kit config.
 
 klytron_configure_host('graphql.myapp.com', [
     'remote_user' => 'root',

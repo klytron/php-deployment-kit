@@ -35,10 +35,10 @@ if (!has('shared_dir_path')) {
  * Simple PHP deployment flow using framework-agnostic tasks
  */
 task('klytron:php:deploy:complete', [
-    'deploy:start_timer',
+    'klytron:deploy:start_timer',
     'klytron:validate:basic',                    // Framework-agnostic validation
     'deploy:unlock',
-    'deploy:fix_repo',
+    'klytron:deploy:fix_repo',
     'klytron:deploy:prepare:complete',           // Framework-agnostic preparation
     'deploy:setup',
     'deploy:lock',
@@ -46,7 +46,7 @@ task('klytron:php:deploy:complete', [
     'deploy:update_code',
     'deploy:shared',
     'klytron:deploy:environment:complete',       // Framework-agnostic env deployment
-    'deploy:env',
+    'klytron:deploy:env',
     'deploy:vendors',
     'deploy:writable',
     'deploy:symlink',
@@ -54,14 +54,14 @@ task('klytron:php:deploy:complete', [
     'deploy:unlock',
     'deploy:cleanup',
     'klytron:deploy:notify:complete',            // Framework-agnostic success notification
-    'deploy:end_timer',
+    'klytron:deploy:end_timer',
 ])->desc('Complete PHP deployment flow');
 
 /**
  * Minimal PHP deployment flow for very simple projects
  */
 task('klytron:php:deploy:minimal', [
-    'deploy:start_timer',
+    'klytron:deploy:start_timer',
     'deploy:unlock',
     'deploy:setup',
     'deploy:lock',
@@ -73,7 +73,7 @@ task('klytron:php:deploy:minimal', [
     'klytron:deploy:create:server_symlink',
     'deploy:unlock',
     'deploy:cleanup',
-    'deploy:end_timer',
+    'klytron:deploy:end_timer',
 ])->desc('Minimal PHP deployment flow');
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -128,18 +128,18 @@ function php_configure_project_with_public(string $name, string $repository, str
  */
 function klytron_php_deploy_flow(): array {
     return [
-        'deploy:start_timer',
+        'klytron:deploy:start_timer',
         'klytron:validate:basic',                    // Framework-agnostic validation
         'deploy:unlock',
         'klytron:deploy:prepare:complete',           // Framework-agnostic preparation
         'deploy:setup',
         'deploy:lock',
         'deploy:release',
-        'deploy:fix_repo',                          // Fix repo issues BEFORE code update
+        'klytron:deploy:fix_repo',                          // Fix repo issues BEFORE code update
         'deploy:update_code',
         'deploy:shared',
         'klytron:deploy:environment:complete',       // Framework-agnostic env deployment
-        'deploy:env',
+        'klytron:deploy:env',
         'deploy:vendors',
         'deploy:writable',
         'deploy:symlink',
@@ -147,7 +147,7 @@ function klytron_php_deploy_flow(): array {
         'deploy:unlock',
         'deploy:cleanup',
         'klytron:deploy:notify:complete',            // Framework-agnostic success notification
-        'deploy:end_timer',
+        'klytron:deploy:end_timer',
     ];
 }
 
@@ -156,7 +156,7 @@ function klytron_php_deploy_flow(): array {
  */
 function klytron_php_deploy_flow_minimal(): array {
     return [
-        'deploy:start_timer',
+        'klytron:deploy:start_timer',
         'deploy:unlock',
         'deploy:setup',
         'deploy:lock',
@@ -168,6 +168,6 @@ function klytron_php_deploy_flow_minimal(): array {
         'klytron:deploy:create:server_symlink',
         'deploy:unlock',
         'deploy:cleanup',
-        'deploy:end_timer',
+        'klytron:deploy:end_timer',
     ];
 }

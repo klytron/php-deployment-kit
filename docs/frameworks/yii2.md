@@ -43,13 +43,12 @@ klytron_configure_app('my-yii2-app', 'git@github.com:user/my-yii2-app.git');
 // Set deployment paths
 klytron_set_paths('/var/www', '/var/www/html');
 
-// Configure Yii2 project
+// Configure Yii2 project (real kit keys)
 klytron_configure_project([
     'type' => 'yii2',
-    'yii2_app_type' => 'advanced',
-    'yii2_apps' => ['frontend', 'backend', 'api'],
     'database' => 'mysql',
-    'supports_maintenance' => true,
+    'env_file_local' => '.env.production',
+    'env_file_remote' => '.env',
 ]);
 
 // Configure host
@@ -73,103 +72,87 @@ vendor/bin/dep deploy
 ```php
 klytron_configure_project([
     'type' => 'yii2',                       // Yii2 project type
-    'yii2_app_type' => 'advanced',          // Yii2 app type: basic, advanced
-    'yii2_apps' => ['frontend', 'backend'], // Yii2 applications
     'database' => 'mysql',                  // Database type
-    'supports_maintenance' => true,         // Enable maintenance mode
-    'supports_assets' => true,              // Enable asset compilation
-    'supports_cache' => true,               // Enable cache management
-    'supports_console' => true,             // Enable console commands
+    'env_file_local' => '.env.production',
+    'env_file_remote' => '.env',
 ]);
+// Database credentials are plain Deployer config (note `db_pass`), not
+// project flags:
+set('db_host', 'localhost');
+set('db_name', 'myyii2app');
+set('db_user', 'root');
+set('db_pass', 'secret');
 ```
 
 ### Advanced Yii2 Configuration
 
 ```php
-klytron_configure_project([
-    'type' => 'yii2',
-    'yii2_app_type' => 'advanced',
-    'yii2_apps' => ['frontend', 'backend', 'api'],
-    'database' => 'mysql',
-    'db_host' => 'localhost',
-    'db_name' => 'myyii2app',
-    'db_user' => 'root',
-    'db_password' => 'secret',
-    'supports_maintenance' => true,
-    'supports_assets' => true,
-    'supports_cache' => true,
-    'supports_console' => true,
-    'maintenance_mode' => true,
-    'maintenance_message' => 'Site is under maintenance',
-    'maintenance_retry' => 60,
-    'asset_compression' => true,
-    'cache_optimization' => true,
-    'console_commands' => [
-        'migrate/up',
-        'cache/flush-all',
-        'rbac/init',
-    ],
+klytron_configure_yii2_app('my-yii2-app', 'git@github.com:user/my-yii2-app.git', [
+    'database_type' => 'mysql',
+    'env_file' => '.env.production',
+    'public_dir_path' => 'frontend/web',
+    'shared_dir_path' => 'shared',
 ]);
+// Database credentials are plain Deployer config (note `db_pass`), not
+// helper options:
+set('db_host', 'localhost');
+set('db_name', 'myyii2app');
+set('db_user', 'root');
+set('db_pass', 'secret');
 ```
 
 ## 🎯 Yii2-Specific Tasks
 
 ### Available Yii2 Tasks
 
-#### `deploy:yii2`
-
-Main Yii2 deployment task that runs all Yii2-specific operations.
-
-```bash
-vendor/bin/dep deploy:yii2
-```
-
-#### `deploy:yii2:init`
-
-Initialize Yii2 application.
-
-```bash
-vendor/bin/dep deploy:yii2:init
-```
-
-#### `deploy:yii2:migrate`
+#### `klytron:yii2:migrate`
 
 Run Yii2 database migrations.
 
 ```bash
-vendor/bin/dep deploy:yii2:migrate
+vendor/bin/dep klytron:yii2:migrate
 ```
 
-#### `deploy:yii2:assets`
+#### `klytron:yii2:deploy:configure:interactive`
+
+Interactive Yii2 deployment configuration (validates env, domain, settings).
+
+```bash
+vendor/bin/dep klytron:yii2:deploy:configure:interactive
+```
+
+#### `klytron:yii2:compile_assets`
 
 Compile Yii2 assets.
 
 ```bash
-vendor/bin/dep deploy:yii2:assets
+vendor/bin/dep klytron:yii2:compile_assets
 ```
 
-#### `deploy:yii2:cache`
+#### `klytron:yii2:clear_cache` / `klytron:yii2:warmup_cache`
 
-Configure Yii2 cache.
+Clear the Yii2 cache, then warm it up.
 
 ```bash
-vendor/bin/dep deploy:yii2:cache
+vendor/bin/dep klytron:yii2:clear_cache
+vendor/bin/dep klytron:yii2:warmup_cache
 ```
 
-#### `deploy:yii2:maintenance`
+#### `klytron:yii2:maintenance_enable` / `klytron:yii2:maintenance_disable`
 
-Configure Yii2 maintenance mode.
+Enable or disable Yii2 maintenance mode.
 
 ```bash
-vendor/bin/dep deploy:yii2:maintenance
+vendor/bin/dep klytron:yii2:maintenance_enable
+vendor/bin/dep klytron:yii2:maintenance_disable
 ```
 
-#### `deploy:yii2:console`
+#### `klytron:yii2:copy_console`
 
-Run Yii2 console commands.
+Copy the Yii2 console entry point.
 
 ```bash
-vendor/bin/dep deploy:yii2:console
+vendor/bin/dep klytron:yii2:copy_console
 ```
 
 ## 🎯 Yii2 Application Structure
@@ -177,16 +160,12 @@ vendor/bin/dep deploy:yii2:console
 ### Advanced Application Template
 
 ```php
-// Configure Yii2 Advanced Application Template
-klytron_configure_project([
-    'type' => 'yii2',
-    'yii2_app_type' => 'advanced',
-    'yii2_apps' => ['frontend', 'backend', 'api'],
-    'yii2_common_path' => 'common',
-    'yii2_console_path' => 'console',
-    'yii2_web_path' => 'web',
-    'yii2_runtime_path' => 'runtime',
-    'yii2_vendor_path' => 'vendor',
+// Configure Yii2 Advanced Application Template (paths consumed by the
+// recipe via public_dir_path / shared_dir_path)
+klytron_configure_yii2_app('my-yii2-app', 'git@github.com:user/my-yii2-app.git', [
+    'database_type' => 'mysql',
+    'public_dir_path' => 'frontend/web',
+    'shared_dir_path' => 'shared',
 ]);
 ```
 
@@ -194,13 +173,9 @@ klytron_configure_project([
 
 ```php
 // Configure Yii2 Basic Application Template
-klytron_configure_project([
-    'type' => 'yii2',
-    'yii2_app_type' => 'basic',
-    'yii2_apps' => ['web'],
-    'yii2_web_path' => 'web',
-    'yii2_runtime_path' => 'runtime',
-    'yii2_vendor_path' => 'vendor',
+klytron_configure_yii2_app('my-yii2-app', 'git@github.com:user/my-yii2-app.git', [
+    'database_type' => 'mysql',
+    'public_dir_path' => 'web',
 ]);
 ```
 
@@ -209,24 +184,23 @@ klytron_configure_project([
 ### Environment Files
 
 ```php
-// Configure Yii2 environment files
+// Configure Yii2 environment files (real kit keys)
 klytron_configure_project([
     'env_file_local' => '.env.production',
     'env_file_remote' => '.env',
-    'yii2_env' => 'prod',
-    'yii2_debug' => false,
-    'yii2_gii' => false,
 ]);
+// Yii2 runtime env (YII_ENV / YII_DEBUG) is application config — set it in
+// your .env file or entry scripts, not in kit config.
 ```
 
 ### Environment Variables
 
 ```php
 // Set Yii2 environment variables
-klytron_set_env('YII_ENV', 'prod');
-klytron_set_env('YII_DEBUG', 'false');
-klytron_set_env('YII_ENABLE_ERROR_HANDLER', 'false');
-klytron_set_env('YII_ENABLE_EXCEPTION_HANDLER', 'false');
+set('YII_ENV', 'prod');
+set('YII_DEBUG', 'false');
+set('YII_ENABLE_ERROR_HANDLER', 'false');
+set('YII_ENABLE_EXCEPTION_HANDLER', 'false');
 ```
 
 ## 🎯 Yii2 Database Management
@@ -234,57 +208,49 @@ klytron_set_env('YII_ENABLE_EXCEPTION_HANDLER', 'false');
 ### Database Configuration
 
 ```php
-// Configure Yii2 database
-klytron_configure_project([
-    'database' => 'mysql',
-    'db_host' => 'localhost',
-    'db_port' => 3306,
-    'db_name' => 'myyii2app',
-    'db_user' => 'root',
-    'db_password' => 'secret',
-    'db_charset' => 'utf8',
-    'db_tablePrefix' => '',
+// Configure Yii2 database (real signature: string $type first)
+klytron_configure_database('mysql', [
+    'import_path' => 'database/live-db-exports',
+    'supports_migrations' => true,
+    'supports_seeders' => true,
 ]);
+// Credentials for dumps are plain Deployer config (note `db_pass`):
+set('db_host', 'localhost');
+set('db_port', 3306);
+set('db_name', 'myyii2app');
+set('db_user', 'root');
+set('db_pass', 'secret');
 ```
 
 ### Database Migrations
 
 ```php
-// Configure Yii2 migrations
-klytron_configure_project([
-    'database' => 'mysql',
-    'migrations' => true,
-    'migration_namespace' => 'console\\migrations',
-    'migration_table' => '{{%migration}}',
-    'migration_path' => 'console/migrations',
-]);
+// Migrations run via the kit task klytron:yii2:migrate. Migration paths and
+// namespaces are Yii2 application config (console/config/main.php), not kit
+// config — no kit flags are needed.
 ```
 
 ### Migration Tasks
 
 ```php
 // Add Yii2 migration tasks
-klytron_add_task('deploy:yii2:migrate', function () {
+task('deploy:yii2:migrate', function () {
     $apps = get('yii2_apps', ['frontend']);
     
     foreach ($apps as $app) {
         writeln("<info>Running migrations for {$app}...</info>");
         run("php yii migrate/up --interactive=0 --app={$app}");
     }
-}, [
-    'description' => 'Run Yii2 database migrations',
-]);
+})->desc('Run Yii2 database migrations');
 
-klytron_add_task('deploy:yii2:migrate:down', function () {
+task('deploy:yii2:migrate:down', function () {
     $apps = get('yii2_apps', ['frontend']);
     
     foreach ($apps as $app) {
         writeln("<info>Rolling back migrations for {$app}...</info>");
         run("php yii migrate/down 1 --interactive=0 --app={$app}");
     }
-}, [
-    'description' => 'Rollback Yii2 database migrations',
-]);
+})->desc('Rollback Yii2 database migrations');
 ```
 
 ## 🎯 Yii2 Asset Management
@@ -292,22 +258,15 @@ klytron_add_task('deploy:yii2:migrate:down', function () {
 ### Asset Configuration
 
 ```php
-// Configure Yii2 assets
-klytron_configure_project([
-    'supports_assets' => true,
-    'asset_compression' => true,
-    'asset_optimization' => true,
-    'asset_publishing' => true,
-    'asset_combine' => true,
-    'asset_minify' => true,
-]);
+// Asset compilation runs via the kit task klytron:yii2:compile_assets.
+// No kit flags are needed — wire that task into your deploy flow.
 ```
 
 ### Asset Tasks
 
 ```php
 // Add Yii2 asset tasks
-klytron_add_task('deploy:yii2:assets', function () {
+task('deploy:yii2:assets', function () {
     $apps = get('yii2_apps', ['frontend']);
     
     foreach ($apps as $app) {
@@ -319,20 +278,16 @@ klytron_add_task('deploy:yii2:assets', function () {
         // Publish assets
         run("php yii asset/publish --interactive=0 --app={$app}");
     }
-}, [
-    'description' => 'Compile Yii2 assets',
-]);
+})->desc('Compile Yii2 assets');
 
-klytron_add_task('deploy:yii2:assets:clear', function () {
+task('deploy:yii2:assets:clear', function () {
     $apps = get('yii2_apps', ['frontend']);
     
     foreach ($apps as $app) {
         writeln("<info>Clearing assets for {$app}...</info>");
         run("php yii asset/clear --interactive=0 --app={$app}");
     }
-}, [
-    'description' => 'Clear Yii2 assets',
-]);
+})->desc('Clear Yii2 assets');
 ```
 
 ## 🎯 Yii2 Cache Management
@@ -340,21 +295,16 @@ klytron_add_task('deploy:yii2:assets:clear', function () {
 ### Cache Configuration
 
 ```php
-// Configure Yii2 cache
-klytron_configure_project([
-    'supports_cache' => true,
-    'cache_driver' => 'redis',
-    'cache_optimization' => true,
-    'cache_clear_on_deploy' => true,
-    'cache_warming' => true,
-]);
+// Cache handling runs via the kit tasks klytron:yii2:clear_cache and
+// klytron:yii2:warmup_cache. No kit flags are needed — wire those tasks
+// into your deploy flow.
 ```
 
 ### Cache Tasks
 
 ```php
 // Add Yii2 cache tasks
-klytron_add_task('deploy:yii2:cache', function () {
+task('deploy:yii2:cache', function () {
     $apps = get('yii2_apps', ['frontend']);
     
     foreach ($apps as $app) {
@@ -368,20 +318,16 @@ klytron_add_task('deploy:yii2:cache', function () {
             run("php yii cache/warm --interactive=0 --app={$app}");
         }
     }
-}, [
-    'description' => 'Configure Yii2 cache',
-]);
+})->desc('Configure Yii2 cache');
 
-klytron_add_task('deploy:yii2:cache:clear', function () {
+task('deploy:yii2:cache:clear', function () {
     $apps = get('yii2_apps', ['frontend']);
     
     foreach ($apps as $app) {
         writeln("<info>Clearing cache for {$app}...</info>");
         run("php yii cache/flush-all --interactive=0 --app={$app}");
     }
-}, [
-    'description' => 'Clear Yii2 cache',
-]);
+})->desc('Clear Yii2 cache');
 ```
 
 ## 🎯 Yii2 Maintenance Mode
@@ -389,21 +335,18 @@ klytron_add_task('deploy:yii2:cache:clear', function () {
 ### Maintenance Configuration
 
 ```php
-// Configure Yii2 maintenance mode
-klytron_configure_project([
-    'supports_maintenance' => true,
-    'maintenance_mode' => true,
-    'maintenance_message' => 'Site is under maintenance',
-    'maintenance_retry' => 60,
-    'maintenance_allowed_ips' => ['127.0.0.1', '::1'],
-]);
+// Maintenance mode runs via the kit tasks klytron:yii2:maintenance_enable
+// and klytron:yii2:maintenance_disable. The custom tasks below read their
+// own values via get() with defaults — set them with set() if you use them:
+set('maintenance_message', 'Site is under maintenance');
+set('maintenance_retry', 60);
 ```
 
 ### Maintenance Tasks
 
 ```php
 // Add Yii2 maintenance tasks
-klytron_add_task('deploy:yii2:maintenance:on', function () {
+task('deploy:yii2:maintenance:on', function () {
     $apps = get('yii2_apps', ['frontend']);
     $message = get('maintenance_message', 'Site is under maintenance');
     $retry = get('maintenance_retry', 60);
@@ -412,20 +355,16 @@ klytron_add_task('deploy:yii2:maintenance:on', function () {
         writeln("<info>Enabling maintenance mode for {$app}...</info>");
         run("php yii maintenance/enable --message='{$message}' --retry={$retry} --app={$app}");
     }
-}, [
-    'description' => 'Enable Yii2 maintenance mode',
-]);
+})->desc('Enable Yii2 maintenance mode');
 
-klytron_add_task('deploy:yii2:maintenance:off', function () {
+task('deploy:yii2:maintenance:off', function () {
     $apps = get('yii2_apps', ['frontend']);
     
     foreach ($apps as $app) {
         writeln("<info>Disabling maintenance mode for {$app}...</info>");
         run("php yii maintenance/disable --app={$app}");
     }
-}, [
-    'description' => 'Disable Yii2 maintenance mode',
-]);
+})->desc('Disable Yii2 maintenance mode');
 ```
 
 ## 🎯 Yii2 Console Commands
@@ -433,19 +372,17 @@ klytron_add_task('deploy:yii2:maintenance:off', function () {
 ### Console Configuration
 
 ```php
-// Configure Yii2 console commands
-klytron_configure_project([
-    'supports_console' => true,
-    'console_commands' => [
-        'migrate/up',
-        'cache/flush-all',
-        'rbac/init',
-        'user/create',
-    ],
-    'console_commands_per_app' => [
-        'frontend' => ['migrate/up', 'cache/flush-all'],
-        'backend' => ['rbac/init', 'user/create'],
-    ],
+// Command lists for the custom console task below are your own values —
+// store them with set() (the task reads them via get() with defaults):
+set('console_commands', [
+    'migrate/up',
+    'cache/flush-all',
+    'rbac/init',
+    'user/create',
+]);
+set('console_commands_per_app', [
+    'frontend' => ['migrate/up', 'cache/flush-all'],
+    'backend' => ['rbac/init', 'user/create'],
 ]);
 ```
 
@@ -453,7 +390,7 @@ klytron_configure_project([
 
 ```php
 // Add Yii2 console tasks
-klytron_add_task('deploy:yii2:console', function () {
+task('deploy:yii2:console', function () {
     $commands = get('console_commands', []);
     $commandsPerApp = get('console_commands_per_app', []);
     
@@ -470,9 +407,7 @@ klytron_add_task('deploy:yii2:console', function () {
             run("php yii {$command} --interactive=0 --app={$app}");
         }
     }
-}, [
-    'description' => 'Run Yii2 console commands',
-]);
+})->desc('Run Yii2 console commands');
 ```
 
 ## 🎯 Yii2 Security
@@ -480,21 +415,16 @@ klytron_add_task('deploy:yii2:console', function () {
 ### Security Configuration
 
 ```php
-// Configure Yii2 security
-klytron_configure_project([
-    'yii2_security' => true,
-    'security_headers' => true,
-    'csrf_validation' => true,
-    'xss_protection' => true,
-    'sql_injection_protection' => true,
-]);
+// Yii2 security hardening is application config (request/params components),
+// not kit config — no kit flags are needed. The custom task below is a
+// per-project example.
 ```
 
 ### Security Tasks
 
 ```php
 // Add Yii2 security tasks
-klytron_add_task('deploy:yii2:security', function () {
+task('deploy:yii2:security', function () {
     $apps = get('yii2_apps', ['frontend']);
     
     foreach ($apps as $app) {
@@ -506,9 +436,7 @@ klytron_add_task('deploy:yii2:security', function () {
         // Generate security keys
         run("php yii security/generate-keys --app={$app}");
     }
-}, [
-    'description' => 'Configure Yii2 security',
-]);
+})->desc('Configure Yii2 security');
 ```
 
 ## 🎯 Yii2 Health Checks
@@ -516,23 +444,21 @@ klytron_add_task('deploy:yii2:security', function () {
 ### Health Check Configuration
 
 ```php
-// Configure Yii2 health checks
-klytron_configure_project([
-    'yii2_health_checks' => true,
-    'health_check_endpoints' => [
-        '/site/health',
-        '/api/health',
-        '/admin/health',
-    ],
-    'health_check_timeout' => 30,
+// Endpoint lists for the custom health-check task below are your own values —
+// store them with set() (the task reads them via get() with defaults):
+set('health_check_endpoints', [
+    '/site/health',
+    '/api/health',
+    '/admin/health',
 ]);
+set('health_check_timeout', 30);
 ```
 
 ### Health Check Tasks
 
 ```php
 // Add Yii2 health check tasks
-klytron_add_task('deploy:yii2:health_check', function () {
+task('deploy:yii2:health_check', function () {
     $apps = get('yii2_apps', ['frontend']);
     $endpoints = get('health_check_endpoints', ['/site/health']);
     $timeout = get('health_check_timeout', 30);
@@ -549,9 +475,7 @@ klytron_add_task('deploy:yii2:health_check', function () {
             }
         }
     }
-}, [
-    'description' => 'Run Yii2 health checks',
-]);
+})->desc('Run Yii2 health checks');
 ```
 
 ## 🎯 Yii2 Deployment Examples
@@ -570,10 +494,9 @@ klytron_set_domain('myapp.com');
 
 klytron_configure_project([
     'type' => 'yii2',
-    'yii2_app_type' => 'advanced',
-    'yii2_apps' => ['frontend', 'backend'],
     'database' => 'mysql',
-    'supports_maintenance' => true,
+    'env_file_local' => '.env.production',
+    'env_file_remote' => '.env',
 ]);
 
 klytron_configure_host('myapp.com', [
@@ -596,28 +519,16 @@ klytron_set_domain('myapp.com');
 
 klytron_configure_project([
     'type' => 'yii2',
-    'yii2_app_type' => 'advanced',
-    'yii2_apps' => ['frontend', 'backend', 'api'],
     'database' => 'mysql',
-    'db_host' => 'localhost',
-    'db_name' => 'myyii2app',
-    'db_user' => 'root',
-    'db_password' => 'secret',
-    'supports_maintenance' => true,
-    'supports_assets' => true,
-    'supports_cache' => true,
-    'supports_console' => true,
-    'maintenance_mode' => true,
-    'asset_compression' => true,
-    'cache_optimization' => true,
-    'console_commands' => [
-        'migrate/up',
-        'cache/flush-all',
-        'rbac/init',
-    ],
-    'yii2_env' => 'prod',
-    'yii2_debug' => false,
+    'env_file_local' => '.env.production',
+    'env_file_remote' => '.env',
 ]);
+// Database credentials are plain Deployer config (note `db_pass`), not
+// project flags:
+set('db_host', 'localhost');
+set('db_name', 'myyii2app');
+set('db_user', 'root');
+set('db_pass', 'secret');
 
 klytron_configure_host('myapp.com', [
     'remote_user' => 'root',

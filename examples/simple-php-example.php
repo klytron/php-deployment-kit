@@ -15,8 +15,8 @@ namespace Deployer;
 // ── Package ───────────────────────────────────────────────────────────────────
 // Use the plain PHP recipe — no framework-specific tasks loaded.
 
-require __DIR__ . '/vendor/klytron/php-deployment-kit/deployment-kit.php';
-require __DIR__ . '/vendor/klytron/php-deployment-kit/recipes/klytron-php-recipe.php';
+require dirname(__DIR__) . '/vendor/klytron/php-deployment-kit/deployment-kit.php';
+require dirname(__DIR__) . '/vendor/klytron/php-deployment-kit/recipes/klytron-php-recipe.php';
 
 // ── Application ───────────────────────────────────────────────────────────────
 // deploy_path is auto-built as: {deploy_path_parent}/{application}
@@ -46,7 +46,7 @@ klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
     'http_user'   => 'www-data',
     'http_group'  => 'www-data',
     'labels'      => ['stage' => 'production'],
-    'ssh_options' => [
+    'ssh_arguments' => [
         'ConnectTimeout'      => 30,
         'ServerAliveInterval' => 60,
         'ServerAliveCountMax' => 3,
@@ -68,6 +68,8 @@ klytron_configure_project([
     'cleanup_assets'    => false,
     'optimize_images'   => false,
     'enable_encryption' => false,
+    // 'env_file_local'  => false, // No env file for this project — skips .env
+    //                              // upload + validation (cron runners, static tooling).
 ]);
 
 // ── Shared files & dirs ───────────────────────────────────────────────────────
@@ -98,6 +100,8 @@ task('deploy', [
     'deploy:unlock',                     // Remove stale lock file
     'klytron:deploy:check_pushed',       // Check all local commits are pushed
     'klytron:validate:basic',            // Check local files exist before connecting
+    'deploy:unlock',                     // Remove stale lock file
+    'klytron:deploy:fix_repo',           // Clear stale git locks, configure safe.directory
     'deploy:setup',                      // Create directory structure on server
     'deploy:lock',                       // Write deploy.lock
     'deploy:release',                    // Create timestamped release dir

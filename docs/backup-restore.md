@@ -47,35 +47,27 @@ vendor/bin/dep deploy
 ### Backup Triggers
 
 Automatic backups are created when:
-- Running `dep deploy`
-- Running `dep rollback`
-- Running `dep backup:create`
-- Before critical operations
+- Running `dep deploy` (when `shouldBackupBeforeDeployment` is enabled)
+- Running `dep rollback` (Deployer built-in — returns to the previous release)
 
 ## 🛠️ Manual Backups
 
 ### Create Manual Backup
 
 ```bash
-# Create a complete backup
-vendor/bin/dep backup:create
+# Create a pre-deployment snapshot of the current release
+# (plus a database dump when shouldBackupDatabase is true)
+vendor/bin/dep klytron:deploy:backup:create
 
-# Create database-only backup
-vendor/bin/dep backup:database
-
-# Create files-only backup
-vendor/bin/dep backup:files
+# Laravel projects can use the Laravel variant instead
+vendor/bin/dep klytron:laravel:deploy:backup:create
 ```
 
 ### Backup with Custom Name
 
-```bash
-# Create backup with custom name
-vendor/bin/dep backup:create --name="pre-migration-backup"
-
-# Create timestamped backup
-vendor/bin/dep backup:create --timestamp
-```
+Backups are timestamped automatically (`backup_before_deploy_<timestamp>`)
+under `{{deploy_path}}/backups`. The task takes no `--name`/`--timestamp`
+options — rename the directory afterwards if you need a custom label.
 
 ## 🗄️ Database Backups
 
@@ -90,31 +82,32 @@ vendor/bin/dep backup:create --timestamp
 ### Database Backup Configuration
 
 ```php
-// In your deploy.php
-klytron_configure_database([
-    'type' => 'mysql',
-    'host' => 'localhost',
-    'database' => 'myapp',
-    'username' => 'dbuser',
-    'password' => 'dbpass',
-    'backup_enabled' => true,
-    'backup_compress' => true,
+// In your deploy.php — real signature: klytron_configure_database(string $type, array $config)
+klytron_configure_database('mysql', [
+    'import_path' => 'database/live-db-exports', // used by db:import tasks
+    'supports_migrations' => true,
+    'supports_seeders' => true,
 ]);
+
+// Database credentials for dumps are plain Deployer config (read by
+// klytron:deploy:backup:create) — note the `db_pass` key:
+set('db_host', 'localhost');
+set('db_port', '3306');
+set('db_name', 'myapp');
+set('db_user', 'dbuser');
+set('db_pass', 'dbpass');
+```
 ```
 
 ### Database Backup Options
 
 ```php
-klytron_configure_database([
-    // ... database config
-    'backup_options' => [
-        'include_tables' => ['users', 'posts', 'comments'],
-        'exclude_tables' => ['temp_*', 'cache_*'],
-        'single_transaction' => true,
-        'routines' => true,
-        'triggers' => true,
-    ],
-]);
+// There is no per-table backup filtering in this package. The database dump
+// is a full mysqldump/pg_dump written next to the release snapshot whenever
+// both flags below are true:
+set('shouldBackupBeforeDeployment', true);
+set('shouldBackupDatabase', true);
+```
 ```
 
 ## 📁 File System Backups
@@ -131,42 +124,35 @@ File system backups include:
 ### File Backup Configuration
 
 ```php
-// Configure file backup options
-klytron_configure_backup([
-    'files' => [
-        'enabled' => true,
-        'compress' => true,
-        'include_dirs' => [
-            'app/',
-            'config/',
-            'storage/app/public/',
-        ],
-        'exclude_dirs' => [
-            'storage/logs/',
-            'storage/framework/cache/',
-            'node_modules/',
-        ],
-    ],
-]);
+// There is no klytron_configure_backup() helper in this package.
+// File backups are the release snapshot itself (cp -r of current),
+// controlled by these real flags/keys:
+set('shouldBackupBeforeDeployment', true); // snapshot current release first
+set('backup_path', '{{deploy_path}}/backups'); // where snapshots live
+set('backup_keep', 5);                         // how many to retain
+```
 ```
 
 ## 🔄 Restore Procedures
 
 ### Restore from Backup
 
+There are no `backup:list` / `backup:restore` commands in this package.
+Use Deployer's built-in rollback, which points `current` at the previous
+successful release:
+
 ```bash
-# List available backups
-vendor/bin/dep backup:list
+# Roll back to the previous release
+vendor/bin/dep rollback
 
-# Restore complete backup
-vendor/bin/dep backup:restore --name="backup-2024-01-15-10-30-00"
-
-# Restore database only
-vendor/bin/dep backup:restore --name="backup-2024-01-15-10-30-00" --database-only
-
-# Restore files only
-vendor/bin/dep backup:restore --name="backup-2024-01-15-10-30-00" --files-only
+# Roll back to a specific release (Deployer built-in option)
+vendor/bin/dep rollback -o rollback_candidate=123
 ```
+
+Release snapshots taken by `klytron:deploy:backup:create` live under
+`{{deploy_path}}/backups/backup_before_deploy_<timestamp>/` — copy files
+or import the `database_<timestamp>.sql` dump manually when you need a
+partial restore.
 
 ### Emergency Rollback
 
@@ -181,41 +167,38 @@ vendor/bin/dep rollback --version=1
 ### Manual Restore
 
 ```bash
-# Restore database manually
-vendor/bin/dep backup:restore-database --file="backup-db-2024-01-15.sql"
+# Import a database dump from a snapshot manually
+mysql -h localhost -u dbuser -p myapp < backup_before_deploy_<timestamp>/database_<timestamp>.sql
 
-# Restore files manually
-vendor/bin/dep backup:restore-files --file="backup-files-2024-01-15.tar.gz"
+# Copy release files back from a snapshot manually
+cp -r {{deploy_path}}/backups/backup_before_deploy_<timestamp> {{deploy_path}}/current-restore
 ```
 
 ## 📍 Backup Locations
 
 ### Default Locations
 
+Snapshots live under `{{deploy_path}}/backups` (override with
+`set('backup_path', ...)`). Each run creates one timestamped directory
+holding a copy of `current` plus the database dump when enabled:
+
 ```
-/var/www/backups/
-├── database/
-│   ├── backup-2024-01-15-10-30-00.sql.gz
-│   └── backup-2024-01-15-11-45-00.sql.gz
-├── files/
-│   ├── backup-2024-01-15-10-30-00.tar.gz
-│   └── backup-2024-01-15-11-45-00.tar.gz
-└── complete/
-    ├── backup-2024-01-15-10-30-00/
-    └── backup-2024-01-15-11-45-00/
+{{deploy_path}}/backups/
+├── backup_before_deploy_2024-01-15_10-30-00/
+│   ├── (copy of current release files)
+│   └── database_2024-01-15_10-30-00.sql
+└── backup_before_deploy_2024-01-15_11-45-00/
+    ├── (copy of current release files)
+    └── database_2024-01-15_11-45-00.sql
 ```
 
 ### Custom Backup Location
 
 ```php
-// Configure custom backup location
-klytron_configure_backup([
-    'backup_path' => '/var/backups/myapp',
-    'retention' => [
-        'days' => 30,
-        'max_backups' => 50,
-    ],
-]);
+// Configure a custom backup location (real keys)
+set('backup_path', '/var/backups/myapp');
+set('backup_keep', 50);
+```
 ```
 
 ## ⚙️ Configuration
@@ -223,63 +206,28 @@ klytron_configure_backup([
 ### Backup Configuration Options
 
 ```php
-klytron_configure_backup([
-    // Enable/disable backups
-    'enabled' => true,
-    
-    // Backup location
-    'backup_path' => '/var/www/backups',
-    
-    // Compression
-    'compress' => true,
-    
-    // Retention policy
-    'retention' => [
-        'days' => 30,
-        'max_backups' => 50,
-        'auto_cleanup' => true,
-    ],
-    
-    // Database backup
-    'database' => [
-        'enabled' => true,
-        'compress' => true,
-        'include_tables' => [],
-        'exclude_tables' => ['temp_*'],
-    ],
-    
-    // File backup
-    'files' => [
-        'enabled' => true,
-        'compress' => true,
-        'include_dirs' => [],
-        'exclude_dirs' => ['node_modules', 'storage/logs'],
-    ],
-    
-    // Notification
-    'notifications' => [
-        'on_success' => true,
-        'on_failure' => true,
-        'email' => 'admin@example.com',
-    ],
-]);
+// Real backup configuration — plain Deployer config, no helper wrapper:
+set('shouldBackupBeforeDeployment', true); // snapshot current release first
+set('shouldBackupDatabase', true);         // include a database dump
+set('backup_path', '{{deploy_path}}/backups');
+set('backup_keep', 5);
+
+// Database credentials used for the dump (note the `db_pass` key):
+set('db_host', 'localhost');
+set('db_port', '3306');
+set('db_name', 'myapp');
+set('db_user', 'dbuser');
+set('db_pass', 'dbpass');
+```
 ```
 
 ### Environment-Specific Configuration
 
 ```php
-// Production backup settings
-klytron_configure_backup([
-    'enabled' => true,
-    'retention' => ['days' => 90, 'max_backups' => 100],
-    'compress' => true,
-]);
-
-// Development backup settings
-klytron_configure_backup([
-    'enabled' => false, // Disable in development
-    'retention' => ['days' => 7, 'max_backups' => 10],
-]);
+// Enable snapshots for production, skip them for development
+set('shouldBackupBeforeDeployment', true);
+set('shouldBackupDatabase', true);
+```
 ```
 
 ## 🔧 Troubleshooting
@@ -289,47 +237,42 @@ klytron_configure_backup([
 #### Backup Fails
 
 ```bash
-# Check backup permissions
-vendor/bin/dep backup:test
+# Inspect the deployment configuration without connecting
+vendor/bin/dep klytron:deploy:info
 
-# Check available disk space
-vendor/bin/dep backup:check-space
-
-# View backup logs
-vendor/bin/dep backup:logs
+# Check available disk space on the server before retrying
+ssh deploy@your-server.com 'df -h /var/www'
 ```
 
 #### Database Backup Issues
 
 ```bash
-# Test database connection
-vendor/bin/dep backup:test-database
+# Verify database credentials from your local machine first
+mysql -h <db-host> -u <db-user> -p -e 'SELECT 1'
 
-# Check database permissions
-vendor/bin/dep backup:check-database-permissions
+# Then confirm deploy.php sets the same values via
+# set('db_host', ...), set('db_name', ...), set('db_user', ...), set('db_pass', ...)
 ```
 
 #### Restore Issues
 
 ```bash
-# Validate backup integrity
-vendor/bin/dep backup:validate --name="backup-name"
+# List snapshots on the server (backup_path defaults to {{deploy_path}}/backups)
+ssh deploy@your-server.com 'ls -la /var/www/<app>/backups'
 
-# Dry run restore
-vendor/bin/dep backup:restore --dry-run --name="backup-name"
+# Roll back to the previous release (Deployer built-in)
+vendor/bin/dep rollback
 ```
 
 ### Backup Commands Reference
 
 | Command | Description |
 |---------|-------------|
-| `backup:create` | Create a new backup |
-| `backup:list` | List available backups |
-| `backup:restore` | Restore from backup |
-| `backup:delete` | Delete backup |
-| `backup:cleanup` | Clean up old backups |
-| `backup:test` | Test backup functionality |
-| `backup:validate` | Validate backup integrity |
+| `klytron:deploy:backup:create` | Snapshot current release (+ DB dump when enabled) |
+| `klytron:laravel:deploy:backup:create` | Laravel variant of the pre-deploy snapshot |
+| `rollback` | Return `current` to the previous release (Deployer built-in) |
+| `klytron:deploy:clean_repo` | Purge the cached git mirror to force a clean clone |
+| `deploy:cleanup` | Delete old releases (keeps `keep_releases`) |
 
 ### Backup File Formats
 

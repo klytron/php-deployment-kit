@@ -5,6 +5,19 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-10-08
+
+### Fixed
+
+- **Bare task names in reusable flows**: `klytron_deploy_flow()`,
+  `klytron:php:deploy:complete/minimal` and the Laravel/Yii2 flow builders
+  referenced `deploy:start_timer`, `deploy:fix_repo`, `deploy:env` and
+  `deploy:end_timer`, none of which exists (all carry the `klytron:` prefix).
+  Any plain-PHP consumer wiring those flows failed task resolution. All
+  references now use the real names. Decided for prefix-everything rather
+  than aliasing bare names: aliases would double the task surface and rot
+  again silently.
+
 ## [1.2.0] - 2026-10-08
 
 ### Added

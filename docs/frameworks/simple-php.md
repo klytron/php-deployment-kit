@@ -41,11 +41,12 @@ klytron_configure_app('my-php-app', 'git@github.com:user/my-php-app.git');
 // Set deployment paths
 klytron_set_paths('/var/www', '/var/www/html');
 
-// Configure simple PHP project
+// Configure simple PHP project (real kit keys)
 klytron_configure_project([
-    'type' => 'simple-php',
+    'type' => 'php',
     'database' => 'none',
-    'supports_static' => true,
+    'env_file_local' => '.env',
+    'env_file_remote' => '.env',
 ]);
 
 // Configure host
@@ -68,14 +69,13 @@ vendor/bin/dep deploy
 
 ```php
 klytron_configure_project([
-    'type' => 'simple-php',                 // Simple PHP project type
-    'database' => 'none',                   // No database required
-    'supports_static' => true,              // Enable static file support
-    'supports_custom_scripts' => false,     // Enable custom scripts
-    'file_permissions' => '644',            // File permissions
-    'directory_permissions' => '755',       // Directory permissions
-    'backup_enabled' => false,              // Disable backups for simple projects
-    'maintenance_mode' => false,            // Disable maintenance mode
+    'type' => 'php',                 // Plain PHP project type
+    'database' => 'none',            // No database required
+    'env_file_local' => '.env',      // Local file uploaded as remote .env
+    'env_file_remote' => '.env',
+    'cleanup_assets' => false,
+    'optimize_images' => false,
+    'supports_sitemap' => false,
 ]);
 ```
 
@@ -83,70 +83,59 @@ klytron_configure_project([
 
 ```php
 klytron_configure_project([
-    'type' => 'simple-php',
+    'type' => 'php',
     'database' => 'none',
-    'supports_static' => true,
-    'supports_custom_scripts' => true,
-    'file_permissions' => '644',
-    'directory_permissions' => '755',
-    'static_optimization' => true,
-    'gzip_compression' => true,
-    'cache_headers' => true,
-    'security_headers' => true,
-    'custom_deploy_script' => 'deploy.sh',
-    'pre_deploy_commands' => [
-        'npm install',
-        'npm run build',
-    ],
-    'post_deploy_commands' => [
-        'php scripts/cleanup.php',
-        'php scripts/notify.php',
-    ],
+    'env_file_local' => '.env',
+    'env_file_remote' => '.env',
+    'cleanup_assets' => false,
+    'optimize_images' => false,
+    'supports_sitemap' => false,
 ]);
+// File permissions are plain Deployer config (octal ints, note the real keys):
+set('default_file_permissions', 0644);
+set('default_dir_permissions', 0755);
+// Custom pre/post commands are your own tasks — define them with task()
+// and wire with before()/after() (see the custom-script examples below).
 ```
 
 ## 🎯 Simple PHP-Specific Tasks
 
 ### Available Simple PHP Tasks
 
-#### `deploy:simple_php`
+There are no `deploy:simple_php*` tasks in this package. Simple PHP projects
+use the plain-PHP recipe plus the generic tasks:
 
-Main simple PHP deployment task.
+#### `klytron:php:deploy:complete`
+
+Full simple-PHP pipeline (validate, env upload, vendors, finalize, notify).
 
 ```bash
-vendor/bin/dep deploy:simple_php
+vendor/bin/dep klytron:php:deploy:complete
 ```
 
-#### `deploy:simple_php:static`
+#### `klytron:php:deploy:minimal`
 
-Deploy static assets for simple PHP projects.
+Minimal pipeline for very simple projects (no env upload, no vendors).
 
 ```bash
-vendor/bin/dep deploy:simple_php:static
+vendor/bin/dep klytron:php:deploy:minimal
 ```
 
-#### `deploy:simple_php:permissions`
+#### `klytron:upload:env:production`
 
-Set file permissions for simple PHP projects.
+Upload the local env file to the shared dir (skipped when
+`env_file_local` is `false`).
 
 ```bash
-vendor/bin/dep deploy:simple_php:permissions
+vendor/bin/dep klytron:upload:env:production
 ```
 
-#### `deploy:simple_php:custom_scripts`
+#### `klytron:deploy:health_check`
 
-Run custom deployment scripts.
-
-```bash
-vendor/bin/dep deploy:simple_php:custom_scripts
-```
-
-#### `deploy:simple_php:optimize`
-
-Optimize simple PHP application.
+Verify the site responds over HTTP after deploy.
 
 ```bash
-vendor/bin/dep deploy:simple_php:optimize
+vendor/bin/dep klytron:deploy:health_check
 ```
 
 ## 🎯 File Management
@@ -154,20 +143,18 @@ vendor/bin/dep deploy:simple_php:optimize
 ### File Permissions Configuration
 
 ```php
-// Configure file permissions
-klytron_configure_project([
-    'file_permissions' => '644',
-    'directory_permissions' => '755',
-    'executable_files' => ['deploy.sh', 'scripts/*.php'],
-    'executable_permissions' => '755',
-]);
+// File permission values are read by the custom task below via get() —
+// store them with set(). (The kit's own permission keys are
+// default_file_permissions / default_dir_permissions as octal ints.)
+set('file_permissions', '644');
+set('directory_permissions', '755');
 ```
 
 ### File Permission Tasks
 
 ```php
 // Add file permission tasks
-klytron_add_task('deploy:simple_php:set_permissions', function () {
+task('deploy:simple_php:set_permissions', function () {
     $filePerms = get('file_permissions', '644');
     $dirPerms = get('directory_permissions', '755');
     $execPerms = get('executable_permissions', '755');
@@ -183,9 +170,7 @@ klytron_add_task('deploy:simple_php:set_permissions', function () {
     foreach ($executableFiles as $file) {
         run("chmod {$execPerms} {$file}");
     }
-}, [
-    'description' => 'Set file permissions for simple PHP project',
-]);
+})->desc('Set file permissions for simple PHP project');
 ```
 
 ## 🎯 Static Asset Management
@@ -193,22 +178,19 @@ klytron_add_task('deploy:simple_php:set_permissions', function () {
 ### Static Asset Configuration
 
 ```php
-// Configure static assets
-klytron_configure_project([
-    'supports_static' => true,
-    'static_directories' => ['css', 'js', 'images', 'fonts'],
-    'static_optimization' => true,
-    'gzip_compression' => true,
-    'cache_headers' => true,
-    'static_cache_duration' => 86400, // 24 hours
-]);
+// Static-asset values are read by the custom tasks below via get() —
+// store them with set():
+set('static_optimization', true);
+set('gzip_compression', true);
+set('cache_headers', true);
+set('static_cache_duration', 86400); // 24 hours
 ```
 
 ### Static Asset Tasks
 
 ```php
 // Add static asset tasks
-klytron_add_task('deploy:simple_php:optimize_static', function () {
+task('deploy:simple_php:optimize_static', function () {
     if (get('static_optimization', false)) {
         writeln('<info>Optimizing static assets...</info>');
         
@@ -230,11 +212,9 @@ klytron_add_task('deploy:simple_php:optimize_static', function () {
         
         writeln('<info>Static asset optimization completed</info>');
     }
-}, [
-    'description' => 'Optimize static assets',
-]);
+})->desc('Optimize static assets');
 
-klytron_add_task('deploy:simple_php:configure_static', function () {
+task('deploy:simple_php:configure_static', function () {
     if (get('gzip_compression', false)) {
         // Configure gzip compression
         $gzipConfig = "
@@ -274,9 +254,7 @@ klytron_add_task('deploy:simple_php:configure_static', function () {
         // Append to .htaccess
         run("echo '{$cacheConfig}' >> .htaccess");
     }
-}, [
-    'description' => 'Configure static asset handling',
-]);
+})->desc('Configure static asset handling');
 ```
 
 ## 🎯 Custom Scripts
@@ -284,20 +262,18 @@ klytron_add_task('deploy:simple_php:configure_static', function () {
 ### Custom Script Configuration
 
 ```php
-// Configure custom scripts
-klytron_configure_project([
-    'supports_custom_scripts' => true,
-    'custom_deploy_script' => 'deploy.sh',
-    'pre_deploy_commands' => [
-        'npm install',
-        'npm run build',
-        'php scripts/prepare.php',
-    ],
-    'post_deploy_commands' => [
-        'php scripts/cleanup.php',
-        'php scripts/notify.php',
-        'php scripts/log.php',
-    ],
+// Command lists are read by the custom tasks below via get() — store them
+// with set():
+set('custom_deploy_script', 'deploy.sh');
+set('pre_deploy_commands', [
+    'npm install',
+    'npm run build',
+    'php scripts/prepare.php',
+]);
+set('post_deploy_commands', [
+    'php scripts/cleanup.php',
+    'php scripts/notify.php',
+    'php scripts/log.php',
 ]);
 ```
 
@@ -305,29 +281,25 @@ klytron_configure_project([
 
 ```php
 // Add custom script tasks
-klytron_add_task('deploy:simple_php:pre_deploy', function () {
+task('deploy:simple_php:pre_deploy', function () {
     $commands = get('pre_deploy_commands', []);
     
     foreach ($commands as $command) {
         writeln("<info>Running pre-deploy command: {$command}</info>");
         run($command);
     }
-}, [
-    'description' => 'Run pre-deployment commands',
-]);
+})->desc('Run pre-deployment commands');
 
-klytron_add_task('deploy:simple_php:post_deploy', function () {
+task('deploy:simple_php:post_deploy', function () {
     $commands = get('post_deploy_commands', []);
     
     foreach ($commands as $command) {
         writeln("<info>Running post-deploy command: {$command}</info>");
         run($command);
     }
-}, [
-    'description' => 'Run post-deployment commands',
-]);
+})->desc('Run post-deployment commands');
 
-klytron_add_task('deploy:simple_php:custom_script', function () {
+task('deploy:simple_php:custom_script', function () {
     $script = get('custom_deploy_script');
     
     if ($script && file_exists($script)) {
@@ -335,9 +307,7 @@ klytron_add_task('deploy:simple_php:custom_script', function () {
         run("chmod +x {$script}");
         run("./{$script}");
     }
-}, [
-    'description' => 'Run custom deployment script',
-]);
+})->desc('Run custom deployment script');
 ```
 
 ## 🎯 Security Configuration
@@ -345,16 +315,14 @@ klytron_add_task('deploy:simple_php:custom_script', function () {
 ### Security Headers Configuration
 
 ```php
-// Configure security headers
-klytron_configure_project([
-    'security_headers' => true,
-    'security_headers_config' => [
-        'X-Frame-Options' => 'DENY',
-        'X-Content-Type-Options' => 'nosniff',
-        'X-XSS-Protection' => '1; mode=block',
-        'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
-        'Content-Security-Policy' => "default-src 'self'",
-    ],
+// Header maps for the custom task below are your own values — store them
+// with set():
+set('security_headers_config', [
+    'X-Frame-Options' => 'DENY',
+    'X-Content-Type-Options' => 'nosniff',
+    'X-XSS-Protection' => '1; mode=block',
+    'Strict-Transport-Security' => 'max-age=31536000; includeSubDomains',
+    'Content-Security-Policy' => "default-src 'self'",
 ]);
 ```
 
@@ -362,7 +330,7 @@ klytron_configure_project([
 
 ```php
 // Add security tasks
-klytron_add_task('deploy:simple_php:security_headers', function () {
+task('deploy:simple_php:security_headers', function () {
     if (get('security_headers', false)) {
         $headers = get('security_headers_config', []);
         
@@ -377,9 +345,7 @@ klytron_add_task('deploy:simple_php:security_headers', function () {
         
         writeln('<info>Security headers configured</info>');
     }
-}, [
-    'description' => 'Configure security headers',
-]);
+})->desc('Configure security headers');
 ```
 
 ## 🎯 Optimization
@@ -387,23 +353,21 @@ klytron_add_task('deploy:simple_php:security_headers', function () {
 ### Optimization Configuration
 
 ```php
-// Configure optimization
-klytron_configure_project([
-    'optimization_enabled' => true,
-    'minify_html' => true,
-    'minify_css' => true,
-    'minify_js' => true,
-    'optimize_images' => true,
-    'remove_comments' => true,
-    'combine_files' => false,
-]);
+// Optimization toggles are read by the custom task below via get() —
+// store them with set():
+set('optimization_enabled', true);
+set('minify_html', true);
+set('minify_css', true);
+set('minify_js', true);
+set('optimize_images', true);
+set('remove_comments', true);
 ```
 
 ### Optimization Tasks
 
 ```php
 // Add optimization tasks
-klytron_add_task('deploy:simple_php:optimize', function () {
+task('deploy:simple_php:optimize', function () {
     if (get('optimization_enabled', false)) {
         writeln('<info>Optimizing simple PHP application...</info>');
         
@@ -435,9 +399,7 @@ klytron_add_task('deploy:simple_php:optimize', function () {
         
         writeln('<info>Optimization completed</info>');
     }
-}, [
-    'description' => 'Optimize simple PHP application',
-]);
+})->desc('Optimize simple PHP application');
 ```
 
 ## 🎯 Health Checks
@@ -445,23 +407,21 @@ klytron_add_task('deploy:simple_php:optimize', function () {
 ### Health Check Configuration
 
 ```php
-// Configure health checks
-klytron_configure_project([
-    'health_checks_enabled' => true,
-    'health_check_endpoints' => [
-        '/',
-        '/health.php',
-        '/status.php',
-    ],
-    'health_check_timeout' => 30,
+// Endpoint lists for the custom health-check task below are your own values —
+// store them with set():
+set('health_check_endpoints', [
+    '/',
+    '/health.php',
+    '/status.php',
 ]);
+set('health_check_timeout', 30);
 ```
 
 ### Health Check Tasks
 
 ```php
 // Add health check tasks
-klytron_add_task('deploy:simple_php:health_check', function () {
+task('deploy:simple_php:health_check', function () {
     if (get('health_checks_enabled', false)) {
         $endpoints = get('health_check_endpoints', ['/']);
         $timeout = get('health_check_timeout', 30);
@@ -477,9 +437,7 @@ klytron_add_task('deploy:simple_php:health_check', function () {
             }
         }
     }
-}, [
-    'description' => 'Run health checks for simple PHP application',
-]);
+})->desc('Run health checks for simple PHP application');
 ```
 
 ## 🎯 Simple PHP Deployment Examples
@@ -496,9 +454,10 @@ klytron_set_paths('/var/www', '/var/www/html');
 klytron_set_domain('myapp.com');
 
 klytron_configure_project([
-    'type' => 'simple-php',
+    'type' => 'php',
     'database' => 'none',
-    'supports_static' => true,
+    'env_file_local' => '.env',
+    'env_file_remote' => '.env',
 ]);
 
 klytron_configure_host('myapp.com', [
@@ -519,24 +478,25 @@ klytron_set_paths('/var/www', '/var/www/html');
 klytron_set_domain('myapp.com');
 
 klytron_configure_project([
-    'type' => 'simple-php',
+    'type' => 'php',
     'database' => 'none',
-    'supports_static' => true,
-    'supports_custom_scripts' => true,
-    'static_optimization' => true,
-    'gzip_compression' => true,
-    'cache_headers' => true,
-    'security_headers' => true,
-    'optimization_enabled' => true,
-    'health_checks_enabled' => true,
-    'pre_deploy_commands' => [
-        'npm install',
-        'npm run build',
-    ],
-    'post_deploy_commands' => [
-        'php scripts/cleanup.php',
-        'php scripts/notify.php',
-    ],
+    'env_file_local' => '.env',
+    'env_file_remote' => '.env',
+    'cleanup_assets' => false,
+    'optimize_images' => false,
+]);
+// Custom toggles/command lists below are your own values — store them with
+// set() (the custom tasks read them via get()):
+set('static_optimization', true);
+set('gzip_compression', true);
+set('cache_headers', true);
+set('pre_deploy_commands', [
+    'npm install',
+    'npm run build',
+]);
+set('post_deploy_commands', [
+    'php scripts/cleanup.php',
+    'php scripts/notify.php',
 ]);
 
 klytron_configure_host('myapp.com', [
@@ -576,15 +536,16 @@ klytron_set_paths('/var/www', '/var/www/html');
 klytron_set_domain('static.myapp.com');
 
 klytron_configure_project([
-    'type' => 'simple-php',
+    'type' => 'php',
     'database' => 'none',
-    'supports_static' => true,
-    'static_optimization' => true,
-    'gzip_compression' => true,
-    'cache_headers' => true,
-    'optimization_enabled' => true,
-    'static_cache_duration' => 604800, // 7 days
+    'env_file_local' => '.env',
+    'env_file_remote' => '.env',
 ]);
+// Custom toggles below are your own values — store them with set():
+set('static_optimization', true);
+set('gzip_compression', true);
+set('cache_headers', true);
+set('static_cache_duration', 604800); // 7 days
 
 klytron_configure_host('static.myapp.com', [
     'remote_user' => 'root',
@@ -604,18 +565,19 @@ klytron_set_paths('/var/www', '/var/www/html');
 klytron_set_domain('scripts.myapp.com');
 
 klytron_configure_project([
-    'type' => 'simple-php',
+    'type' => 'php',
     'database' => 'none',
-    'supports_custom_scripts' => true,
-    'custom_deploy_script' => 'deploy.sh',
-    'executable_files' => ['scripts/*.php', 'deploy.sh'],
-    'pre_deploy_commands' => [
-        'php scripts/validate.php',
-    ],
-    'post_deploy_commands' => [
-        'php scripts/test.php',
-        'php scripts/notify.php',
-    ],
+    'env_file_local' => '.env',
+    'env_file_remote' => '.env',
+]);
+// Custom command lists below are your own values — store them with set():
+set('custom_deploy_script', 'deploy.sh');
+set('pre_deploy_commands', [
+    'php scripts/validate.php',
+]);
+set('post_deploy_commands', [
+    'php scripts/test.php',
+    'php scripts/notify.php',
 ]);
 
 klytron_configure_host('scripts.myapp.com', [
