@@ -880,7 +880,14 @@ task('klytron:deploy:env', [
 task('klytron:upload:env:production', function () {
     $envFileLocal = get('env_file_local');
     $envFileRemote = get('env_file_remote');
-    
+
+    // Projects without env files (cron runners, static tooling) declare
+    // 'env_file_local' => false — uploading nothing is correct, not an error.
+    if (empty($envFileLocal)) {
+        info("ℹ️ No local env file configured (env_file_local is empty), skipping env file upload.");
+        return;
+    }
+
     info("📤 Uploading environment file: $envFileLocal -> $envFileRemote (secrets masked)");
 
     // Get the configurable shared directory path
@@ -1072,6 +1079,12 @@ before('deploy:vendors', 'klytron:cache:vendor');
  */
 task('klytron:validate:env_files', function () {
     $envFileLocal = get('env_file_local', '.env.production');
+    // Same opt-out as the upload task: no env file configured means there is
+    // nothing to validate (cron runners, static tooling).
+    if (empty($envFileLocal)) {
+        info("ℹ️ No local env file configured (env_file_local is empty), skipping env file validation.");
+        return;
+    }
     if (!file_exists($envFileLocal)) {
         error("❌ Local environment file not found: {$envFileLocal}");
         info("💡 Create {$envFileLocal} or configure 'env_file_local' before deploying.");

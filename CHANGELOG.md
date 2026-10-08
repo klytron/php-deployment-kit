@@ -5,6 +5,18 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.11] - 2026-10-08
+
+### Added
+
+- **Opt out of env-file handling**: `'env_file_local' => false` declares a
+  project has no env file (cron runners, static tooling). Validation
+  (`klytron:validate:env_files`) and upload (`klytron:upload:env:production`)
+  both skip cleanly instead of aborting the plan/deploy on a missing file.
+  Decided over special-casing by project type because explicit config reads
+  better in `deploy.php` than hidden type checks. Documented in
+  `docs/configuration-reference.md` (Environment Files).
+
 ## [1.1.10] - 2026-10-08
 
 ### Fixed

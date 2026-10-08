@@ -178,6 +178,10 @@ klytron_configure_project(array $config);
 'env_backup_enabled' => true,           // Enable environment backup
 ```
 
+Projects with no env file at all (cron runners, static tooling) declare
+`'env_file_local' => false`: validation and upload both skip cleanly instead
+of aborting the plan on a missing file.
+
 #### Laravel-Specific Options
 ```php
 'supports_passport' => false,           // Laravel Passport support
