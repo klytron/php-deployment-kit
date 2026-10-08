@@ -20,33 +20,25 @@
 ### Health Check Commands
 
 ```bash
-# Test basic connectivity
-vendor/bin/dep test
+# CI smoke test: validates config + task graph, no SSH needed
+vendor/bin/dep klytron:plan
 
-# Check configuration
-vendor/bin/dep config:check
+# Local validation subtasks (deploy path, domain, env files, placeholders, user)
+vendor/bin/dep klytron:validate:basic
 
-# Validate deployment setup
-vendor/bin/dep validate
-
-# Test SSH connection
-vendor/bin/dep ssh:test
-
-# Check server requirements
-vendor/bin/dep server:check
+# Release a stuck deploy lock, then inspect / roll back
+vendor/bin/dep deploy:unlock
+vendor/bin/dep rollback
 ```
 
 ### Emergency Commands
 
 ```bash
-# Force deployment (skip checks)
-vendor/bin/dep deploy --force
-
 # Deploy with verbose output
 vendor/bin/dep deploy -v
 
-# Deploy with debug mode
-vendor/bin/dep deploy --debug
+# Show what would run (plan resolves the full task graph)
+vendor/bin/dep klytron:plan
 
 # Rollback to previous version
 vendor/bin/dep rollback
@@ -92,11 +84,8 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<domain>/images/<known-file>
 chmod 600 ~/.ssh/id_rsa
 chmod 644 ~/.ssh/id_rsa.pub
 
-# Check server user permissions
-vendor/bin/dep ssh:check-permissions
-
-# Fix server permissions
-vendor/bin/dep fix:permissions
+# Then validate the whole plan locally (no SSH needed)
+vendor/bin/dep klytron:plan
 ```
 
 **Configuration fix:**
@@ -120,27 +109,22 @@ klytron_configure_host('your-server.com', [
 **Solutions:**
 
 ```bash
-# Test database connection
-vendor/bin/dep db:test
+# Validate the deploy plan (checks env files, placeholders, remote user)
+vendor/bin/dep klytron:plan
+vendor/bin/dep klytron:validate:basic
 
-# Check database credentials
-vendor/bin/dep db:check-credentials
-
-# Reset database connection
-vendor/bin/dep db:reset
+# Run the database step on its own
+vendor/bin/dep klytron:laravel:deploy:database:complete
 ```
 
 **Configuration fix:**
 ```php
-// Verify database configuration
-klytron_configure_database([
-    'type' => 'mysql',
-    'host' => 'localhost',
-    'database' => 'myapp',
-    'username' => 'dbuser',
-    'password' => 'dbpass',
-    'port' => 3306,
-    'charset' => 'utf8mb4',
+// Verify database configuration (actual signature:
+klytron_configure_database(string $type, array $config))
+klytron_configure_database('mysql', [
+    'import_path' => 'database/live-db-exports',
+    'supports_migrations' => true,
+    'supports_seeders' => false,
 ]);
 ```
 
@@ -154,25 +138,18 @@ klytron_configure_database([
 **Solutions:**
 
 ```bash
-# Clear composer cache
-vendor/bin/dep composer:clear-cache
+# Re-run the vendor step on its own (vendor/ is hardlink-cached
+# from the previous release by klytron:cache:vendor)
+vendor/bin/dep deploy:vendors
 
-# Update composer dependencies
-vendor/bin/dep composer:update
-
-# Install with memory limit
-vendor/bin/dep composer:install --memory-limit=2G
+# Deploy with verbose output to see the failing command
+vendor/bin/dep deploy -v
 ```
 
 **Configuration fix:**
 ```php
-// In deploy.php
-klytron_configure_composer([
-    'memory_limit' => '2G',
-    'timeout' => 300,
-    'optimize' => true,
-    'no_dev' => true,
-]);
+// In deploy.php — Composer runs via deploy:vendors; tune Deployer natively
+set('default_timeout', 1800);
 ```
 
 ## 🚀 Deployment Issues
@@ -187,28 +164,20 @@ klytron_configure_composer([
 **Solutions:**
 
 ```bash
-# Increase timeout
-vendor/bin/dep deploy --timeout=600
+# Validate the plan without SSH (resolves the full task graph)
+vendor/bin/dep klytron:plan
 
-# Deploy with progress monitoring
-vendor/bin/dep deploy --progress
-
-# Deploy in stages
-vendor/bin/dep deploy:prepare
-vendor/bin/dep deploy:code
+# Deploy in stages using real flow tasks
+vendor/bin/dep klytron:validate:basic
+vendor/bin/dep deploy:release
+vendor/bin/dep deploy:update_code
 vendor/bin/dep deploy:vendors
-vendor/bin/dep deploy:publish
 ```
 
 **Configuration fix:**
 ```php
-// Increase timeouts
-klytron_configure_deployment([
-    'timeout' => 600,
-    'ssh_multiplexing' => true,
-    'ssh_type' => 'native',
-    'ssh_arguments' => ['-o', 'ConnectTimeout=30'],
-]);
+// Increase timeouts natively
+set('default_timeout', 1800);
 ```
 
 ### Issue: Asset compilation fails
@@ -221,26 +190,18 @@ klytron_configure_deployment([
 **Solutions:**
 
 ```bash
-# Clear asset cache
-vendor/bin/dep assets:clear
-
-# Rebuild assets
-vendor/bin/dep assets:build
-
-# Check asset configuration
-vendor/bin/dep assets:check
+# Re-run the real build tasks
+vendor/bin/dep klytron:node:build
+vendor/bin/dep klytron:laravel:node:vite:build
+vendor/bin/dep klytron:laravel:node:mix:build
 ```
 
 **Configuration fix:**
 ```php
-// Configure asset compilation
-klytron_configure_assets([
-    'build_tool' => 'vite', // or 'mix'
-    'build_command' => 'npm run build',
-    'dev_command' => 'npm run dev',
-    'timeout' => 300,
-    'node_version' => '18',
-]);
+// Configure asset compilation with real keys (see configuration-reference.md)
+set('supports_vite', true);
+set('vite_build_command', 'npm run build');
+set('npm_cache_dir', '{{deploy_path}}/.npm-cache');
 ```
 
 ### Issue: Zero-downtime deployment fails
@@ -253,26 +214,20 @@ klytron_configure_assets([
 **Solutions:**
 
 ```bash
-# Enable zero-downtime mode
-vendor/bin/dep deploy --zero-downtime
+# Live HTTP verification after deploy (real task, runs in the flow)
+vendor/bin/dep klytron:deploy:health_check
 
-# Check deployment strategy
-vendor/bin/dep deploy:strategy
-
-# Monitor deployment health
-vendor/bin/dep deploy:health-check
+# Tune it natively
+# set('health_check_timeout', 15);
+# set('health_check_expected_code', 200);
 ```
 
 **Configuration fix:**
 ```php
-// Configure zero-downtime deployment
-klytron_configure_deployment([
-    'zero_downtime' => true,
-    'health_check' => true,
-    'health_check_url' => '/health',
-    'health_check_timeout' => 30,
-    'maintenance_mode' => false,
-]);
+// Health check is klytron:deploy:health_check (URL from
+// application_public_url / application_public_domain)
+set('health_check_timeout', 15);
+set('health_check_expected_code', 200);
 ```
 
 ## 🗄️ Database Issues
@@ -287,30 +242,18 @@ klytron_configure_deployment([
 **Solutions:**
 
 ```bash
-# Check migration status
-vendor/bin/dep db:migrate:status
+# Check migration status on the server, then run the real migrate task
+vendor/bin/dep klytron:laravel:deploy:db:migrate
 
-# Run migrations with force
-vendor/bin/dep db:migrate --force
-
-# Rollback specific migration
-vendor/bin/dep db:migrate:rollback --step=1
-
-# Reset database
-vendor/bin/dep db:reset
+# SQLite failures print the still-Pending rows from migrate:status
+# and fail loud (continue-defaults-to-no) — fix schema, redeploy
 ```
 
 **Configuration fix:**
 ```php
-// Configure database migrations
-klytron_configure_database([
-    'migrations' => [
-        'enabled' => true,
-        'force' => false,
-        'timeout' => 300,
-        'rollback_on_failure' => true,
-    ],
-]);
+// Database behavior is driven by the init answers / auto_* keys
+// (see configuration-reference.md "Unattended CI")
+set('auto_database_operation', 'migrations');
 ```
 
 ### Issue: Database backup fails
@@ -323,25 +266,15 @@ klytron_configure_database([
 **Solutions:**
 
 ```bash
-# Check disk space
-vendor/bin/dep backup:check-space
-
-# Test backup process
-vendor/bin/dep backup:test
-
-# Create backup with custom location
-vendor/bin/dep backup:create --path=/tmp/backup
+# Create a pre-deploy backup with the real task
+vendor/bin/dep klytron:deploy:backup:create
 ```
 
 **Configuration fix:**
 ```php
-// Configure backup settings
-klytron_configure_backup([
-    'backup_path' => '/var/backups',
-    'compress' => true,
-    'max_size' => '1G',
-    'retention' => ['days' => 30],
-]);
+// No klytron_configure_backup() helper exists — use runtime flags
+set('shouldBackupBeforeDeployment', true);
+set('shouldBackupDatabase', true);
 ```
 
 ## 🔐 SSH Issues
@@ -356,17 +289,11 @@ klytron_configure_backup([
 **Solutions:**
 
 ```bash
-# Test SSH connection
-vendor/bin/dep ssh:test
+# Test SSH outside Deployer first
+ssh -T deploy@your-server.com
 
-# Check SSH configuration
-vendor/bin/dep ssh:check-config
-
-# Generate new SSH key
-ssh-keygen -t rsa -b 4096 -C "deploy@example.com"
-
-# Add SSH key to server
-vendor/bin/dep ssh:add-key
+# Generate a new SSH key (local shell, not a dep task)
+ssh-keygen -t ed25519 -C "deploy@your-server.com"
 ```
 
 **Configuration fix:**
@@ -393,14 +320,9 @@ klytron_configure_host('your-server.com', [
 **Solutions:**
 
 ```bash
-# Check SSH key location
-vendor/bin/dep ssh:check-keys
-
-# Set custom SSH key path
-vendor/bin/dep deploy --ssh-key=/path/to/key
-
-# Generate SSH key
-vendor/bin/dep ssh:generate-key
+# Check the local SSH key, then validate the plan
+ls -l ~/.ssh/id_rsa ~/.ssh/id_ed25519
+vendor/bin/dep klytron:plan
 ```
 
 **Configuration fix:**
@@ -424,14 +346,10 @@ klytron_configure_host('your-server.com', [
 **Solutions:**
 
 ```bash
-# Fix file permissions
-vendor/bin/dep fix:permissions
-
-# Check ownership
-vendor/bin/dep check:ownership
-
-# Set correct permissions
-vendor/bin/dep set:permissions
+# Re-run the real permission sweep (single remote script, setgid dirs,
+# node_modules/.git/.npm-cache pruned, symlink inodes via chown -h)
+vendor/bin/dep klytron:deploy:access_permissions
+vendor/bin/dep klytron:deploy:laravel:access_permissions
 ```
 
 **Configuration fix:**
@@ -460,14 +378,8 @@ klytron_configure_host('your-server.com', [
 **Solutions:**
 
 ```bash
-# Make directories writable
-vendor/bin/dep make:writable
-
-# Create required directories
-vendor/bin/dep create:directories
-
-# Check directory permissions
-vendor/bin/dep check:directories
+# Re-run the real permission sweeps (see above)
+vendor/bin/dep klytron:deploy:access_permissions
 ```
 
 ## ⚙️ Configuration Issues
@@ -482,14 +394,9 @@ vendor/bin/dep check:directories
 **Solutions:**
 
 ```bash
-# Validate configuration
-vendor/bin/dep config:validate
-
-# Check configuration
-vendor/bin/dep config:check
-
-# Generate configuration template
-vendor/bin/dep config:generate
+# Validate configuration (real tasks — no config:validate/config:check/config:generate exist)
+vendor/bin/dep klytron:plan
+vendor/bin/dep klytron:validate:basic
 ```
 
 **Configuration fix:**
@@ -513,31 +420,18 @@ klytron_configure_host('your-server.com', [
 **Solutions:**
 
 ```bash
-# Check current environment
-vendor/bin/dep env:check
-
-# Set environment
-vendor/bin/dep deploy --env=production
-
-# Validate environment
-vendor/bin/dep env:validate
+# Validate the resolved environment locally (no env:* tasks exist)
+vendor/bin/dep klytron:plan
+vendor/bin/dep klytron:validate:env_files
 ```
 
 **Configuration fix:**
 ```php
-// Environment-specific configuration
-klytron_configure_environment([
-    'production' => [
-        'database' => 'mysql',
-        'cache' => 'redis',
-        'queue' => 'redis',
-    ],
-    'staging' => [
-        'database' => 'mysql',
-        'cache' => 'file',
-        'queue' => 'sync',
-    ],
-]);
+// No klytron_configure_environment() helper exists — environments are just
+// .env files selected with native set():
+set('env_file_local', '.env.production');
+set('env_file_remote', '.env');
+// set('env_file_local', false); // projects with no env file at all
 ```
 
 ## ⚡ Performance Issues
@@ -591,14 +485,11 @@ klytron_configure_environment([
 **Solutions:**
 
 ```bash
-# Increase memory limit
-vendor/bin/dep deploy --memory-limit=2G
+# Deploy with verbose output to find the slow step
+vendor/bin/dep deploy -v
 
-# Clear caches
-vendor/bin/dep cache:clear
-
-# Optimize composer
-vendor/bin/dep composer:optimize
+# Clear Laravel caches with the real task
+vendor/bin/dep klytron:laravel:deploy:cache:clear:all
 ```
 
 ## 🛠️ Debugging Tools
@@ -606,52 +497,31 @@ vendor/bin/dep composer:optimize
 ### Debug Commands
 
 ```bash
-# Enable debug mode
-vendor/bin/dep deploy --debug
+# Deploy with verbose output
+vendor/bin/dep deploy -v
 
-# Show deployment info
-vendor/bin/dep info
+# Show deployment info (real tasks)
+vendor/bin/dep klytron:deploy:info
+vendor/bin/dep klytron:laravel:deploy:info
 
-# Check server status
-vendor/bin/dep server:status
-
-# View deployment logs
-vendor/bin/dep logs
-
-# Test all components
-vendor/bin/dep test:all
-```
-
-### Log Analysis
-
-```bash
-# View recent logs
-vendor/bin/dep logs:recent
-
-# Search logs
-vendor/bin/dep logs:search "error"
-
-# Export logs
-vendor/bin/dep logs:export
-
-# Clear logs
-vendor/bin/dep logs:clear
+# Validate the plan without SSH
+vendor/bin/dep klytron:plan
+vendor/bin/dep klytron:validate:basic
 ```
 
 ### Health Monitoring
 
 ```bash
-# Health check
-vendor/bin/dep health:check
+# Live HTTP verification (real task, also runs in the flow)
+vendor/bin/dep klytron:deploy:health_check
+```
 
-# Monitor deployment
-vendor/bin/dep health:monitor
+### Log Analysis
 
-# Check system resources
-vendor/bin/dep health:resources
-
-# Validate deployment
-vendor/bin/dep health:validate
+```bash
+# Deployer has no logs:* tasks — re-run with verbose output instead
+vendor/bin/dep deploy -v
+vendor/bin/dep klytron:plan
 ```
 
 ## 🆘 Getting Help

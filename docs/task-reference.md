@@ -435,57 +435,14 @@ vendor/bin/dep deploy:yii2:migrate
 
 ## 🎯 Database Tasks
 
-### `deploy:database:backup`
+This package has no generic `deploy:database:*` tasks. Use the real ones:
 
-Create database backup.
+- `klytron:deploy:backup:create` — pre-deploy snapshot (`{{deploy_path}}/current` copy + `MYSQL_PWD`/`PGPASSWORD` DB dump; gated by `shouldBackupBeforeDeployment` / `shouldBackupDatabase`)
+- `klytron:laravel:deploy:database:complete` — invokes `klytron:laravel:deploy:db:migrate` (when `shouldRunMigration`) and `klytron:laravel:deploy:db:import` (when `shouldImportDbFile`); skips everything when `database_type` is `none`
+- `klytron:laravel:deploy:db:import` (+ `:sqlite` variant) — smart file selection from `db_import_path`, encrypted-file auto-decrypt
+- `klytron:laravel:deploy:passport:install` — `passport:install --force`, keys, personal-access client (gated by `supports_passport` + `shouldRunPassportInstall`)
 
-```bash
-vendor/bin/dep deploy:database:backup
-```
-
-**What it does:**
-- Create database backup
-- Compress backup file
-- Store backup in configured location
-
-### `deploy:database:migrate`
-
-Run database migrations.
-
-```bash
-vendor/bin/dep deploy:database:migrate
-```
-
-**What it does:**
-- Run framework-specific migrations
-- Handle migration errors
-- Log migration results
-
-### `deploy:database:seed`
-
-Run database seeders.
-
-```bash
-vendor/bin/dep deploy:database:seed
-```
-
-**What it does:**
-- Run database seeders
-- Seed production data
-- Handle seeding errors
-
-### `deploy:database:import`
-
-Import database from file.
-
-```bash
-vendor/bin/dep deploy:database:import
-```
-
-**What it does:**
-- Import database from SQL file
-- Handle import errors
-- Validate import results
+Full details in the Laravel section below.
 
 ## 🎯 Asset Tasks
 
@@ -549,125 +506,43 @@ vendor/bin/dep klytron:laravel:node:mix:build
 
 ## 🎯 Testing Tasks
 
-### `test`
-
-Test deployment configuration.
-
-```bash
-vendor/bin/dep test
-```
-
-**What it does:**
-- Validate configuration
-- Test SSH connectivity
-- Check server requirements
-- Verify file permissions
-
-### `test:ssh`
-
-Test SSH connectivity.
+This package has no `test` / `test:ssh` / `test:database` / `test:env` tasks.
+Use the real validation entry points (all local, no SSH needed):
 
 ```bash
-vendor/bin/dep test:ssh
+# Full CI smoke test: config + env files + placeholders + task graph
+vendor/bin/dep klytron:plan
+
+# The five validate subtasks as one group
+vendor/bin/dep klytron:validate:basic
+
+# Individually
+vendor/bin/dep klytron:validate:deploy_path_parent
+vendor/bin/dep klytron:validate:domain
+vendor/bin/dep klytron:validate:env_files
+vendor/bin/dep klytron:validate:placeholders
+vendor/bin/dep klytron:validate:remote_user
 ```
 
-**What it does:**
-- Test SSH connection to hosts
-- Verify SSH key authentication
-- Check SSH configuration
-
-### `test:database`
-
-Test database connectivity.
-
-```bash
-vendor/bin/dep test:database
-```
-
-**What it does:**
-- Test database connection
-- Verify database credentials
-- Check database permissions
-
-### `test:env`
-
-Test environment configuration.
-
-```bash
-vendor/bin/dep test:env
-```
-
-**What it does:**
-- Validate environment files
-- Check environment variables
-- Verify configuration settings
+See "Validate subtasks" below for what each checks.
 
 ## 🎯 Utility Tasks
 
-### `current`
-
-Show current release information.
-
-```bash
-vendor/bin/dep current
-```
-
-**What it does:**
-- Display current release
-- Show release timestamp
-- List release details
-
-### `releases`
-
-List all releases.
+This package defines `klytron:deploy:info` / `klytron:laravel:deploy:info`
+(read-only deployment summaries) and `klytron:delete:project` (double-confirmed
+destructive cleanup scoped to `deploy_path`). `rollback` and `deploy:unlock`
+/ `deploy:cleanup` are native Deployer tasks. There are no `current` /
+`releases` / `status` / `rollback:list` tasks in this package.
 
 ```bash
-vendor/bin/dep releases
-```
+# Read-only deployment summary
+vendor/bin/dep klytron:deploy:info
 
-**What it does:**
-- List all releases
-- Show release timestamps
-- Display release sizes
-
-### `status`
-
-Show deployment status.
-
-```bash
-vendor/bin/dep status
-```
-
-**What it does:**
-- Show deployment status
-- Display host information
-- List active releases
-
-### `rollback`
-
-Rollback to previous release.
-
-```bash
+# Release a stuck lock, clean old releases, roll back
+vendor/bin/dep deploy:unlock
+vendor/bin/dep deploy:cleanup
 vendor/bin/dep rollback
 ```
-
-**What it does:**
-- Rollback to previous release
-- Update symlinks
-- Clean up current release
-
-### `rollback:list`
-
-List available rollback targets.
-
-```bash
-vendor/bin/dep rollback:list
-```
-
-**What it does:**
-- List available releases
-- Show rollback options
-- Display release information
 
 ## 🎯 Custom Tasks
 
@@ -719,53 +594,50 @@ vendor/bin/dep deploy --tag=v1.0.0 --verbose
 ### Database Operations
 
 ```bash
-# Backup database
-vendor/bin/dep deploy:database:backup
+# Backup database (pre-deploy snapshot)
+vendor/bin/dep klytron:deploy:backup:create
 
-# Run migrations
-vendor/bin/dep deploy:database:migrate
-
-# Seed database
-vendor/bin/dep deploy:database:seed
+# Run Laravel migrations (+ optional DB import, per init answers)
+vendor/bin/dep klytron:laravel:deploy:database:complete
+vendor/bin/dep klytron:laravel:deploy:db:migrate
 ```
 
 ### Asset Building
 
 ```bash
-# Build all assets
-vendor/bin/dep deploy:assets:build
+# Generic dispatcher (Vite preferred, Mix only for Laravel projects)
+vendor/bin/dep klytron:node:build
 
-# Build Vite assets
-vendor/bin/dep deploy:assets:vite
+# Laravel Vite build (node_modules hardlink cache + package-lock.json check)
+vendor/bin/dep klytron:laravel:node:vite:build
 
-# Build Mix assets
-vendor/bin/dep deploy:assets:mix
+# Laravel Mix build
+vendor/bin/dep klytron:laravel:node:mix:build
 ```
 
 ### Testing and Validation
 
 ```bash
-# Test configuration
-vendor/bin/dep test
+# CI smoke test: validates config + task graph, no SSH needed
+vendor/bin/dep klytron:plan
 
-# Test SSH connectivity
-vendor/bin/dep test:ssh
+# Local validation subtasks (deploy path, domain, env files, placeholders, user)
+vendor/bin/dep klytron:validate:basic
 
-# Test database connection
-vendor/bin/dep test:database
+# Release a stuck deploy lock, then roll back
+vendor/bin/dep deploy:unlock
+vendor/bin/dep rollback
 ```
 
 ### Utility Operations
 
 ```bash
-# Show current release
-vendor/bin/dep current
+# Show deployment info
+vendor/bin/dep klytron:deploy:info
 
-# List all releases
-vendor/bin/dep releases
-
-# Show deployment status
-vendor/bin/dep status
+# Release a stuck lock, clean old releases
+vendor/bin/dep deploy:unlock
+vendor/bin/dep deploy:cleanup
 
 # Rollback to previous release
 vendor/bin/dep rollback
@@ -872,14 +744,21 @@ of forking. All read plain project config — see `configuration-reference.md`.
 |---|---|---|
 | `klytron:set:domain-from-env` | `domain_env_var` (default `APP_URL_DOMAIN`), `domain_env_file` (default `.env.production`) | Per-project "read domain from env file" tasks |
 | `klytron:deploy:replace-tokens` | `domain_replace_files` (list, `{{…}}` placeholders allowed), `domain_replace_search` (default `example.com`) | Per-project sed loops over ad-loader/config files |
-| `klytron:check:binaries` | `required_binaries` (list) | Per-project optimizer/tool presence warnings; warning-only, never fails |
+| `klytron:check:binaries` | `required_binaries` (list) | Per-project optimizer/tool presence warnings; warning-only, never fails — parses `command -v` stdout (never `test()`, which false-negatives on some hosts) so a mirror hiccup can't fail a good deploy |
 | `klytron:laravel:decrypt:paths` | `decrypt_paths` (release-relative dirs) | Per-project `artisan file:decrypt <dir>` loops |
 | `klytron:laravel:extra-commands` | `extra_artisan_commands` (verbatim command strings) | Per-project sitemap/link-fixup tasks — wire once in the flow |
-| `klytron:laravel:check:web-php` | none (reads local `composer.json` + live URL) | Per-project "is the domain PHP new enough" warnings |
+| `klytron:laravel:check:web-php` | none (reads local `composer.json` + live URL) | Per-project "is the domain PHP new enough" warnings — asks the running site over HTTP (any non-success status is the signal) and never parses server internals, so it stays advisory and can't misread FPM pools |
 
 Wire the flow-point tasks in the project's `deploy` list (e.g.
 `extra-commands` after finalize, `check:web-php` at the end); the rest run
 standalone or wherever the flow needs them.
+
+Why `klytron:opcache:reset` reads `application_public_domain`/`application_public_url` only:
+it never reads Deployer's provision `domain` key because that key is an `ask()`
+closure — touching it in a non-interactive deploy blocks forever on a "Domain:"
+prompt. The reset curls the live site SAPI (Virtualmin `fcgi-bin/phpX.Y.fcgi` /
+`php-cgi` workers are untouched by a systemd php-fpm reload) with a short-lived
+token-gated script, then deletes it. Disable with `set('skip_opcache_reset', true)`.
 
 ### `klytron:deploy:health_check`
 
@@ -941,6 +820,195 @@ Clears OPcache through the **live site SAPI** (required on Virtualmin hosts that
 ### `klytron:deploy:clean_repo`
 
 Explicit task to completely wipe Deployer's remote `.dep/repo` cache when a corrupt git object occurs on the server.
+
+Use `klytron:deploy:fix_repo` for routine deploys (it only clears stale
+`index.lock` files and tops up `safe.directory` — it never deletes
+`.dep/repo`, so the fast git cache survives). Reach for
+`klytron:deploy:clean_repo` only when the cache itself is corrupt and a full
+re-clone is required.
+
+### `klytron:deploy:fix_repo`
+
+Routine git-cache first aid, safe to run on every deploy (before
+`deploy:update_code`).
+
+```bash
+vendor/bin/dep klytron:deploy:fix_repo
+```
+
+**What it does (verified in `klytron-tasks.php`):**
+- Removes stale lock files only: `<deploy_path>/.git/index.lock` and `<deploy_path>/.dep/repo/index.lock`
+- Runs `git config --global --add safe.directory` for the deploy path, the repo cache, and `deploy_path_parent` (fixes "dubious ownership" without touching data)
+- Never deletes `.dep/repo` — the cached clone is preserved for fast updates
+
+### `klytron:deploy:fix_git_ownership`
+
+Ownership/`safe.directory` repair after `deploy:update_code` (also auto-hooked
+via `after('deploy:update_code', 'klytron:deploy:fix_git_ownership')`).
+
+```bash
+vendor/bin/dep klytron:deploy:fix_git_ownership
+```
+
+**What it does (verified in `klytron-tasks.php`):**
+- Adds the `.dep/repo` cache and the current `release_path` to `safe.directory`
+- `chown -R http_user:http_group` + `chmod -R 755` on the repo cache so later git operations don't hit "dubious ownership"
+
+### `klytron:deploy:access_permissions`
+
+Final ownership/permission sweep over the active release. Single remote script
+(one SSH round-trip), setgid directory mode, symlink-inode aware.
+
+```bash
+vendor/bin/dep klytron:deploy:access_permissions
+```
+
+**What it does (verified in `klytron-tasks.php`):**
+- One remote `set -eu` script: `chown http_user:http_group` over the release, then `chmod` dirs (`default_dir_permissions | 02000`, e.g. `2755` setgid) and files (`default_file_permissions`)
+- Prunes `node_modules`, `.git`, and `.npm-cache` from the recursive `find` passes (the historic deploy-stall source)
+- `chown -h` symlink-inode sweep over the release plus a `find -H … -maxdepth 1 -type l` pass on the served dir — plain `chown` follows links (fixes targets, leaves root-owned inodes, which 403s under Apache `SymLinksIfOwnerMatch`), so inodes are re-pointed explicitly, never followed, never recursive
+- Laravel extras when `project_type === 'laravel'`: `chmod -R laravel_storage_permissions` on `storage`, `laravel_cache_permissions` on `bootstrap/cache`
+- `.htaccess`, shared `storage`/`bootstrap/cache`, and the `public_html` inode handled inside the same script
+
+### `klytron:upload:env:production`
+
+Uploads the local env file to `shared/` so every release shares it.
+
+```bash
+vendor/bin/dep klytron:upload:env:production
+```
+
+**What it does (verified in `klytron-tasks.php`):**
+- Uploads `env_file_local` → `<shared_dir_path>/<env_file_remote>` (e.g. `.env.production` → `shared/.env`)
+- Skips cleanly when `env_file_local` is empty/`false` (cron runners, static tooling with no env file) — same opt-out as `klytron:validate:env_files`
+- Never prints secrets: with `debug_env_upload=true` the preview goes through `klytron_mask_secrets()`; remote validation uses quiet `[ -f ] && grep -q` existence checks so values never cross SSH stdout
+
+### Validate subtasks
+
+`klytron:validate:basic` runs all five; each also runs standalone:
+
+| Task | Purpose | Code location |
+|---|---|---|
+| `klytron:validate:deploy_path_parent` | Aborts unless `deploy_path_parent` is an absolute path (blocks deploys to the wrong location) | `deployment-kit-core.php` → `klytron_validate_deploy_path_parent()` |
+| `klytron:validate:domain` | Warns when `application_public_domain`/`application_public_html` are missing; notes whether the public-html dir exists yet | `klytron-tasks.php` |
+| `klytron:validate:env_files` | Fails when the local env file is missing — unless `env_file_local` is `false`/empty, then it skips cleanly (no-env projects) | `klytron-tasks.php` |
+| `klytron:validate:placeholders` | Fails on unresolved `${…}` placeholders in `deploy_path_parent`, `application_public_html`, `public_dir_path` (e.g. `klytron_set_domain()` never called) | `klytron-tasks.php` |
+| `klytron:validate:remote_user` | Warns on `remote_user === 'root'`; confirms non-root otherwise. Default deployer is `deployer` (honors `DEPLOY_USER`); root-run hosts need the sudoers setup in `docs/quick-start.md#non-root-deployment-and-sudoers-setup` | `klytron-tasks.php`, `deployment-kit-core.php` (`klytron_configure_host`) |
+
+### Confirm / backup / success / info / delete tasks
+
+| Task | Behavior |
+|---|---|
+| `klytron:deploy:confirm` | Intentionally empty (confirmation is handled by interactive questions); kept for backward-compatible flows |
+| `klytron:laravel:deploy:confirm` | Group: `klytron:laravel:init:questions` (unattended-CI keys documented in `configuration-reference.md`) |
+| `klytron:deploy:backup:create` | Copies `{{deploy_path}}/current` to a timestamped `backups/` dir; `mysqldump` via `MYSQL_PWD` (never on the command line) when credentials exist; gated by `shouldBackupBeforeDeployment` |
+| `klytron:laravel:deploy:backup:create`, `klytron:laravel:backup:pre_deploy` / `post_deploy`, `klytron:laravel:backup:manage`, `klytron:laravel:backup:health_check` | Laravel backup variants wired into the Laravel flows |
+| `klytron:deploy:success` | Timing summary + live URL from `application_public_domain` |
+| `klytron:laravel:deploy:success` | Invokes the generic success task, then app/path/symlink details; `after()`-hooked to `klytron:system:restart` (PHP-FPM reload, idempotent per deploy) |
+| `klytron:deploy:info`, `klytron:laravel:deploy:info` | Read-only deployment summary (app, repo, branch, host, paths, domain, timeouts) |
+| `klytron:delete:project` | Destructive: double-confirmed (`askConfirmation` + type `DELETE`), scoped strictly to `deploy_path`, then `rm -rf {{deploy_path}}` |
+
+### Assets / fonts / sitemap / images tasks
+
+Gating flags are read per run — nothing is installed or generated unless its
+flag is on:
+
+| Task | Gate (default) | Behavior |
+|---|---|---|
+| `klytron:assets:map` | `supports_vite`/`supports_mix` + `cleanup_assets` (true) | Maps Vite hashed assets for DB URL compatibility (`AssetMappingTask::mapAssets()`) |
+| `klytron:assets:cleanup` | `cleanup_assets` (true) | Removes problematic `.htaccess` files from build dirs |
+| `klytron:fonts:verify` | `verify_fonts` (false) | Verifies webfont delivery; skips when disabled |
+| `klytron:fonts:debug` | none (always runs diagnostics) | Dumps font-loading diagnostics |
+| `klytron:sitemap:generate` / `verify` / `check` | `supports_sitemap` (false) | Generate → verify written → HTTP accessibility check |
+| `klytron:images:optimize` | `optimize_images` (false) | Post-deploy image compression (`ImageOptimizationTask::optimizeImages()`) |
+| `klytron:laravel:deploy:generate:sitemap` | `supports_sitemap` (false) | Laravel variant: tries `sitemap:generate`, then `app:sitemap-generate`, then `sitemap:create`; warns and continues when none exist |
+| `klytron:laravel:fix:assets:permissions` | checks `assets_directory` (default `public/web-assets`) | `chmod 644/755` sweep over fonts, CSS, JS, images when that dir exists |
+
+### Hidden metrics / env-decrypt stubs
+
+Nine placeholder tasks are `->hidden()` by design (verified in
+`klytron-tasks.php`) so `dep list` stays clean — they log a skip line and do
+nothing until real implementations land: `klytron:metrics:display`,
+`klytron:metrics:export`, `klytron:metrics:compare`, `klytron:metrics:start`,
+`klytron:metrics:end`, `klytron:env:decrypt`,
+`klytron:env:decrypt:production`, `klytron:env:validate`,
+`klytron:env:setup`. (The working Laravel decryption task is the separate
+`klytron:laravel:env:decrypt`, gated on `LARAVEL_ENV_ENCRYPTION_KEY`.)
+
+### Laravel tasks (`recipes/klytron-laravel-recipe.php`)
+
+#### `klytron:laravel:deploy:db:migrate`
+
+```bash
+vendor/bin/dep klytron:laravel:deploy:db:migrate
+```
+
+- Gated by `shouldRunMigration` (set from the init questions / `auto_database_operation`); skips quietly otherwise
+- SQLite branch: ensures the DB file via `artisan klytron:sqlite:setup --force`, then `artisan migrate --force`. On failure it prints the still-`Pending` rows from `migrate:status` so the exact schema gap is in the log, then fail-louds: the "continue anyway?" prompt defaults to **no**
+- MySQL/Postgres branch: `artisan migrate --force`, fail-loud prompt on error
+
+#### `klytron:laravel:deploy:passport:install`
+
+Gated by `supports_passport` + `shouldRunPassportInstall`. Verifies
+`vendor/laravel/passport/composer.json` exists, runs
+`artisan passport:install --force`, generates keys
+(`passport:keys --force`) when missing, and creates the personal-access
+client. Fail-loud prompt on error.
+
+#### `klytron:laravel:storage:link`
+
+Gated by `supports_storage_link` (default true). Prefers the enhanced
+`artisan klytron:storage:link-clean`, falls back to standard
+`artisan storage:link`.
+
+#### `klytron:laravel:deploy:cache:clear:all`
+
+Gated by `shouldClearAllCaches` (default true). Runs `cache:clear`,
+`config:clear`, `route:clear`, `view:clear`, and `clear-compiled` against
+`{{release_or_current_path}}`.
+
+#### `klytron:deploy:laravel:access_permissions`
+
+Laravel companion to the generic sweep (auto-hooked with
+`after('klytron:deploy:access_permissions', …)`). Single remote script with
+`timeout 90` guards: `chmod`/`chown` on `storage` (`laravel_storage_permissions`)
+and `bootstrap/cache` (`laravel_cache_permissions`), resolving symlinked paths
+via `readlink -f` and skipping broken symlinks; `.env` set to `640`.
+
+### Composite (group) tasks
+
+| Task | Members |
+|---|---|
+| `klytron:deploy:environment:complete` | `klytron:upload:env:production` (upload runs exactly once per deploy) |
+| `klytron:laravel:deploy:environment:complete` | `klytron:deploy:environment:complete` |
+| `klytron:laravel:deploy:database:complete` | Invokes `db:migrate` when `shouldRunMigration`, `db:import` when `shouldImportDbFile`; skips all when `database_type` is `none` |
+| `klytron:laravel:deploy:cache:complete` | `cache:clear:all` (when `shouldClearAllCaches`) + `artisan:config:cache` + `artisan:optimize` |
+| `klytron:laravel:deploy:finalize:complete` | `klytron:deploy:finalize:complete` + `klytron:laravel:storage:link` |
+| `klytron:deploy:finalize:complete` | `create:server_symlink` + `create:server_symlink_aliases` + `access_permissions` |
+| `klytron:deploy:prepare:complete` / `klytron:laravel:deploy:prepare:complete` | `confirm` + `backup:create` when `shouldBackupBeforeDeployment` |
+| `klytron:deploy:notify:complete` / `klytron:laravel:deploy:notify:complete` | `success` tasks above |
+| `klytron:php:deploy:complete` / `klytron:php:deploy:minimal` | Full and minimal plain-PHP flows (`recipes/klytron-php-recipe.php`; minimal skips env/vendors/finalize) |
+
+### Node build tasks (canonical names)
+
+- `klytron:node:build` — generic dispatcher: Vite config + `build` script → `klytron:node:vite:build`; `production` (Mix) script on a Laravel project → `klytron:laravel:node:mix:build`. Anything else is a hard error.
+- `klytron:laravel:node:vite:build` — Laravel Vite build used by the Laravel flows: hardlink-copies `node_modules` from the previous release, diffs `package-lock.json`, and skips `npm install` when dependencies are unchanged; restores execute bits on `node_modules/.bin` first (exit-126 guard).
+- `klytron:laravel:node:mix:build` — Laravel Mix build (`npm run production`, `MIX_*`/`NODE_*`/`APP_URL`/`ASSET_URL` exposed, OpenSSL legacy-provider fallback).
+- `klytron:node:vite:build` — framework-agnostic Vite build with the same NVM/`node`→`nodejs` detection, registry-mirror retry, and masked `.env` injection used outside Laravel flows.
+
+### Server recipe (`recipes/klytron-server-recipe.php`)
+
+- `klytron:server:deploy:configs` — copies (or symlinks) configured server files into the release. Configure with `server_config_files`, each item `{source, target, mode, overwrite}` (`source`/`target` relative to the release; optional `symlink`, `owner`, `group` override the `http_user:http_group` defaults):
+
+```php
+set('server_config_files', [
+    ['source' => 'server/.htaccess.production', 'target' => 'public/.htaccess', 'mode' => 0644, 'overwrite' => true],
+]);
+after('deploy:shared', 'klytron:server:deploy:configs');
+```
+
+- `klytron:deploy:server:htaccess` — legacy single-`.htaccess` deploy (`htaccess_source`, default `server/.htaccess.production`); prefer `deploy:configs`.
+- `klytron:laravel:deploy:htaccess` — deprecated alias, delegates to `klytron:server:deploy:configs`.
 
 
 ## 🎯 Task Configuration

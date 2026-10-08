@@ -2317,6 +2317,12 @@ task('klytron:laravel:check:web-php', function () {
         info('');
         info('   Still confirm the domain PHP in the hosting panel — a deploy');
         info('   sets the artisan binary, never the domain FPM pool.');
+        info('');
+        info('   Also check the scheduler: where it exists (e.g. a cron manager');
+        info('   invoking a per-project PHP binary), it is configured separately');
+        info('   from the domain and is NOT changed by this deploy. If it runs an');
+        info('   older PHP, every scheduled task dies silently while the site');
+        info('   keeps serving.');
         return;
     }
 

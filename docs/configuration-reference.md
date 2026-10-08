@@ -173,14 +173,16 @@ klytron_configure_project(array $config);
 
 #### Environment Files
 ```php
-'env_file_local' => '.env.production',  // Local environment file
+'env_file_local' => '.env.production',  // Local environment file (false = no env file, skip cleanly)
 'env_file_remote' => '.env',            // Remote environment file
-'env_backup_enabled' => true,           // Enable environment backup
 ```
 
 Projects with no env file at all (cron runners, static tooling) declare
 `'env_file_local' => false`: validation and upload both skip cleanly instead
-of aborting the plan on a missing file.
+of aborting the plan on a missing file. This is deliberate explicit config,
+not a hidden project-type check — `deploy.php` says there is no env file, so
+`klytron:validate:env_files` and `klytron:upload:env:production` both return
+early on `empty($envFileLocal)` (see `klytron-tasks.php`; CHANGELOG 1.1.11).
 
 #### Consumer-derived task config
 ```php
@@ -200,56 +202,35 @@ of aborting the plan on a missing file.
 ],
 ```
 
-#### Laravel-Specific Options
+#### Laravel-Specific Options (actual keys in `deployment-kit-core.php`)
 ```php
 'supports_passport' => false,           // Laravel Passport support
-'supports_nodejs' => false,             // Node.js build support (generic)
-'supports_vite' => false,               // Vite asset compilation
-'supports_filament' => false,           // Filament v5 asset publishing (artisan filament:assets)
+'supports_nodejs' => true,              // Node.js build support (generic dispatcher gate)
+'supports_vite' => true,                // Vite asset compilation
 'supports_mix' => false,                // Laravel Mix support
+'supports_filament' => null,            // Filament asset publishing: null = auto-detect, bool = explicit
 'supports_storage_link' => true,        // Storage symlink support
-'supports_sitemap' => false,            // Sitemap generation
-'supports_queue' => false,              // Queue worker support
-'supports_schedule' => false,           // Task scheduler support
-'supports_horizon' => false,            // Laravel Horizon support
-'supports_telescope' => false,          // Laravel Telescope support
+'supports_sitemap' => false,            // Sitemap generation gate
+'verify_fonts' => false,                // Webfont delivery verification gate
+'cleanup_assets' => true,               // Asset mapping + .htaccess cleanup gate
+'optimize_images' => false,             // Post-deploy image optimization gate
+'enable_encryption' => false,           // Env file encryption (sets env_encryption_environments)
+'public_dir_path' => null,              // Override recipe default (e.g. '{{deploy_path}}/current/public')
+'shared_dir_path' => null,              // Override recipe default (e.g. '{{deploy_path}}/shared')
 ```
+
+There are no `supports_queue` / `supports_schedule` / `supports_horizon` /
+`supports_telescope`, `supports_rate_limiting` / `supports_api_docs` /
+`supports_cors` / `supports_oauth`, `yii2_app_type` / `yii2_apps`,
+`backup_*`, or `security_*` keys in `klytron_configure_project()` — the full
+key list above is the entire `$defaults` array in
+`deployment-kit-core.php`. Backups are driven by the runtime flags
+`shouldBackupBeforeDeployment` / `shouldBackupDatabase`
+(`set('shouldBackupBeforeDeployment', true)`), not project config.
 
 #### Git & Safety Options
 ```php
 'check_git_pushed' => true,             // Abort if local branch has unpushed commits
-```
-
-#### API-Specific Options
-```php
-'supports_rate_limiting' => false,      // Rate limiting support
-'supports_api_docs' => false,           // API documentation
-'supports_cors' => false,               // CORS support
-'supports_oauth' => false,              // OAuth support
-```
-
-#### Yii2-Specific Options
-```php
-'yii2_app_type' => 'advanced',          // Yii2 app type: basic, advanced
-'yii2_apps' => ['frontend', 'backend'], // Yii2 applications
-'supports_maintenance' => true,         // Maintenance mode support
-```
-
-#### Backup Configuration
-```php
-'backup_enabled' => true,               // Enable backups
-'backup_database' => true,              // Backup database
-'backup_files' => false,                // Backup files
-'backup_keep_days' => 7,                // Keep backups for days
-'backup_path' => '/var/backups',        // Backup path
-```
-
-#### Security Options
-```php
-'security_checks' => true,              // Enable security checks
-'env_validation' => true,               // Validate environment
-'ssh_key_validation' => true,           // Validate SSH keys
-'production_safety' => true,            // Production safety checks
 ```
 
 **Complete Example:**
@@ -266,9 +247,7 @@ klytron_configure_project([
     'supports_vite' => true,
     'supports_storage_link' => true,
     'supports_passport' => false,
-    'backup_enabled' => true,
-    'backup_database' => true,
-    'security_checks' => true,
+    'supports_sitemap' => false,
 ]);
 ```
 
@@ -374,7 +353,7 @@ Configure host settings dynamically from environment variables, eliminating hard
 ```php
 klytron_configure_host_from_env(
     string $envVar = 'DEPLOY_HOST',       // Environment variable name for the host
-    string $defaultHost = 'localhost',     // Fallback hostname if environment variable is unset
+    ?string $fallback = null,             // Fallback hostname when the env var is unset (null = abort with a clear error)
     array $config = []                     // Default host configuration overrides
 );
 ```
@@ -390,7 +369,7 @@ klytron_configure_host_from_env(
 **Example:**
 ```php
 // In deploy.php:
-klytron_configure_host_from_env('DEPLOY_HOST', 'fallback-server.com', [
+klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
     'remote_user' => 'deploy',
     'branch'      => 'main',
     'http_user'   => 'www-data',
@@ -498,35 +477,29 @@ after('klytron:laravel:deploy:database:complete', 'myproject:seed');
 
 ## 🎯 Environment Variables
 
-### `klytron_set_env()`
-
-Set environment variables for deployment.
-
-```php
-klytron_set_env(string $key, string $value);
-```
-
-**Example:**
-```php
-klytron_set_env('APP_ENV', 'production');
-klytron_set_env('APP_DEBUG', 'false');
-klytron_set_env('CACHE_DRIVER', 'redis');
-```
-
-### `klytron_set_env_file()`
-
-Set environment file path.
+There are no `klytron_set_env()` / `klytron_set_env_file()` helpers in this
+package (verified: neither exists in `deployment-kit-core.php`). Use native
+Deployer `set()` for env-file selection and keep secrets in files, never in
+`deploy.php`:
 
 ```php
-klytron_set_env_file(string $localFile, string $remoteFile);
+set('env_file_local', '.env.production');  // uploaded by klytron:upload:env:production
+set('env_file_remote', '.env');             // target name under shared/
+// No env file at all (cron runners, static tooling):
+// set('env_file_local', false);
 ```
 
-**Example:**
-```php
-klytron_set_env_file('.env.production', '.env');
-```
+Custom tasks likewise use native `task()` / `before()` / `after()` — there is
+no `klytron_add_task()` wrapper (see "Custom Tasks and Hooks" above).
 
 ## 🎯 Node and Vite Configuration
+
+Canonical task names (verified in `klytron-tasks.php` /
+`recipes/klytron-laravel-recipe.php`): `klytron:node:build` (generic
+dispatcher), `klytron:laravel:node:vite:build` (Laravel Vite build used by the
+Laravel flows), `klytron:laravel:node:mix:build` (Laravel Mix build).
+`klytron:node:vite:build` is the framework-agnostic Vite build for non-Laravel
+flows — wire the `klytron:laravel:*` names in Laravel `deploy` lists.
 
 ### Node/NPM Settings
 
@@ -566,109 +539,99 @@ This ensures the Vite build task activates the intended Node version determinist
 Configure database settings.
 
 ```php
-klytron_configure_database(array $config);
+klytron_configure_database(string $type, array $config = []);
 ```
 
-**Available Options:**
-```php
-[
-    'type' => 'mysql' | 'postgresql' | 'sqlite' | 'mariadb',
-    'host' => 'localhost',
-    'port' => 3306,
-    'name' => 'myapp',
-    'user' => 'root',
-    'password' => 'secret',
-    'charset' => 'utf8mb4',
-    'collation' => 'utf8mb4_unicode_ci',
-    'migrations' => true,              // Run migrations
-    'seeds' => false,                  // Run seeders
-    'backup_before_migrate' => true,   // Backup before migration
-    'migration_table' => 'migrations', // Migration table name
-]
-```
+**Parameters:**
+- `$type` (string): `'mysql' | 'postgresql' | 'sqlite' | 'mariadb' | 'none'` (`'none'` disables Passport support and skips DB flows)
+- `$config` (array): `import_path` (default `'database/live-db-exports'`), `supports_migrations` (default `true`), `supports_seeders` (default `true`) — every key is stored as `database_<key>`
 
 **Example:**
 ```php
-klytron_configure_database([
-    'type' => 'mysql',
-    'host' => 'localhost',
-    'name' => 'myapp',
-    'user' => 'root',
-    'password' => 'secret',
-    'migrations' => true,
-    'backup_before_migrate' => true,
+klytron_configure_database('mysql', [
+    'import_path' => 'database/live-db-exports',
+    'supports_migrations' => true,
+    'supports_seeders' => false,
 ]);
 ```
 
 ## 🎯 Backup Configuration
 
-### `klytron_configure_backup()`
-
-Configure backup settings.
+There is no `klytron_configure_backup()` helper in this package (verified: it
+does not exist in `deployment-kit-core.php`). Backups are driven by native
+Deployer runtime flags (defaults in `deployment-kit-core.php`):
 
 ```php
-klytron_configure_backup(array $config);
-```
-
-**Available Options:**
-```php
-[
-    'enabled' => true,                 // Enable backups
-    'database' => true,                // Backup database
-    'files' => false,                  // Backup files
-    'keep_days' => 7,                  // Keep backups for days
-    'path' => '/var/backups',          // Backup path
-    'compress' => true,                // Compress backups
-    'encrypt' => false,                // Encrypt backups
-    'notify' => false,                 // Notify on backup
-    'before_deploy' => true,           // Backup before deployment
-    'after_deploy' => false,           // Backup after deployment
-]
-```
-
-**Example:**
-```php
-klytron_configure_backup([
-    'enabled' => true,
-    'database' => true,
-    'keep_days' => 7,
-    'path' => '/var/backups',
-    'before_deploy' => true,
-]);
+set('shouldBackupBeforeDeployment', true);  // default false; gates klytron:*:backup:create in prepare flows
+set('shouldBackupDatabase', true);          // default true; mysql/mariadb via MYSQL_PWD, postgres via PGPASSWORD
+set('backup_path', '{{deploy_path}}/backups'); // default; backup_keep defaults to 5
 ```
 
 ## 🎯 Security Configuration
 
-### `klytron_configure_security()`
-
-Configure security settings.
+There is no `klytron_configure_security()` helper in this package. The
+equivalent guards are individual keys / tasks:
 
 ```php
-klytron_configure_security(array $config);
+set('check_git_pushed', true); // klytron:deploy:check_pushed aborts on unpushed commits
+// klytron:validate:remote_user warns on remote_user === 'root'
+// (default remote_user is 'deployer', honoring DEPLOY_USER; sudoers guide:
+// docs/quick-start.md#non-root-deployment-and-sudoers-setup)
 ```
 
-**Available Options:**
+## 🎯 Runtime Tuning
+
+All keys are plain Deployer config — set them with native `set()`:
+
+| Key | Default | Used by |
+|---|---|---|
+| `skip_opcache_reset` | `false` | `klytron:opcache:reset` — `true` disables the SAPI reset |
+| `health_check_timeout` | `15` (seconds) | `klytron:deploy:health_check` curl `--max-time` |
+| `health_check_expected_code` | `200` (`301`/`302` also pass when `200` is expected) | `klytron:deploy:health_check` |
+| `plan_target_task` | `'deploy'` | `klytron:plan` resolves the task graph for this task instead |
+| `default_file_permissions` | `0644` | `klytron:deploy:access_permissions` file mode |
+| `default_dir_permissions` | `0755` (setgid bit OR-ed → `2755`) | `klytron:deploy:access_permissions` dir mode |
+| `laravel_storage_permissions` | `0775` | `klytron:deploy:laravel:access_permissions` + generic sweep on `storage` |
+| `laravel_cache_permissions` | `0775` | same, on `bootstrap/cache` |
+| `debug_env_upload` | `false` | `klytron:upload:env:production` masked preview via `klytron_mask_secrets()` |
+| `system_reboot_on_deploy` | `false` | `klytron:system:restart` — `true` reboots instead of `klytron:fpm:reload` |
+| `temp_dir` | `sys_get_temp_dir()` | Staging dir for the masked `.env` download during Vite builds |
+
 ```php
-[
-    'checks' => true,                  // Enable security checks
-    'env_validation' => true,          // Validate environment
-    'ssh_key_validation' => true,      // Validate SSH keys
-    'production_safety' => true,       // Production safety checks
-    'confirm_destructive' => true,     // Confirm destructive operations
-    'validate_permissions' => true,    // Validate file permissions
-    'check_php_version' => true,       // Check PHP version
-    'check_extensions' => true,        // Check PHP extensions
-]
+set('skip_opcache_reset', true);        // systemd-only hosts, no Virtualmin FCGI
+set('health_check_timeout', 30);
+set('health_check_expected_code', 200);
+set('plan_target_task', 'deploy');
+set('default_file_permissions', 0644);
+set('default_dir_permissions', 0755);
+set('laravel_storage_permissions', 0775);
+set('laravel_cache_permissions', 0775);
+set('debug_env_upload', false);         // true only for local debugging — preview is masked but keep it off
+set('system_reboot_on_deploy', false);
 ```
 
-**Example:**
+## 🎯 Unattended CI (`klytron:laravel:init:questions`)
+
+Each key answers one interactive prompt; `null` (the default) means "ask".
+Set them all for fully non-interactive CI:
+
+| Key | Values (`null` = prompt) |
+|---|---|
+| `auto_confirm_production` | `true` / `false` — deploy to production? |
+| `auto_deployment_type` | `'update'` / `'fresh'` |
+| `auto_upload_env` | `true` / `false` — upload `.env` (fresh installs) |
+| `auto_database_operation` | `'migrations'` / `'import'` / `'both'` / `'none'` |
+| `auto_clear_caches` | `true` / `false` |
+| `auto_confirm_settings` | `true` / `false` — skip final confirmation |
+
 ```php
-klytron_configure_security([
-    'checks' => true,
-    'env_validation' => true,
-    'production_safety' => true,
-    'confirm_destructive' => true,
-]);
+// deploy.php (CI): answer every prompt up front, null anywhere = ask
+set('auto_confirm_production', true);
+set('auto_deployment_type', 'update');
+set('auto_upload_env', false);
+set('auto_database_operation', 'migrations');
+set('auto_clear_caches', true);
+set('auto_confirm_settings', true);
 ```
 
 ## 🎯 Complete Configuration Example
