@@ -237,9 +237,6 @@ if ($stage === 'production') {
         run('php artisan config:cache');
         run('php artisan route:cache');
         run('php artisan view:cache');
-        
-        // Set production environment
-        run('php artisan env:production');
     });
     
     // Add to deployment flow
@@ -522,9 +519,9 @@ task('deploy:health_check', function () {
     
     $healthChecks = [
         'Application accessible' => 'curl -f http://localhost/health || exit 1',
-        'Database connection' => 'php artisan db:monitor',
-        'Cache working' => 'php artisan cache:test',
-        'Queue working' => 'php artisan queue:monitor',
+        'Database connection' => 'php artisan migrate:status',
+        'Cache working' => 'php artisan about',
+        'Queue working' => 'php artisan queue:failed',
     ];
     
     foreach ($healthChecks as $check => $command) {

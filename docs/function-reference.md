@@ -711,6 +711,6 @@ klytron_configure_host('server.com', ['deploy_path' => '/path']); // ✅ Correct
 
 ---
 
-**💡 Pro Tip**: Use the `--debug` flag with deployment commands to see detailed function execution information.
+**💡 Pro Tip**: Use `-vvv` (Deployer verbose output) with deployment commands to see detailed task execution information.
 
 **🔍 Need Help?**: Check the [Troubleshooting Guide](troubleshooting.md) for common function-related issues. 

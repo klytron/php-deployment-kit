@@ -132,6 +132,11 @@ set('extra_artisan_commands', [
 
 ### Available Laravel Tasks
 
+The `task('deploy:laravel:*', ...)` examples further below are per-project
+starting points you own — the kit tasks above are what actually ships.
+Custom values they read via `get()` must be stored with `set()` (unknown
+keys passed to `klytron_configure_project()` are dropped).
+
 #### `klytron:laravel:deploy:environment:complete`
 
 Upload the Laravel environment file (plus optional decryption).
@@ -251,24 +256,21 @@ set('db_pass', 'secret');
 ### Database Migrations
 
 ```php
-// Enable database migrations
-klytron_configure_project([
-    'database' => 'mysql',
-    'migrations' => true,
-    'backup_before_migrate' => true,
-    'migration_table' => 'migrations',
-]);
+// Migrations run via klytron:laravel:deploy:db:migrate whenever the
+// shouldRunMigration flag is true (asked interactively when unset):
+set('shouldRunMigration', true);
+set('shouldBackupBeforeDeployment', true); // snapshot current release first
 ```
 
 ### Database Seeders
 
 ```php
-// Enable database seeding
-klytron_configure_project([
-    'database' => 'mysql',
-    'seeds' => true,
-    'seeders' => ['UserSeeder', 'RoleSeeder'],
-]);
+// Run seeders through the consumer-derived extra-commands task:
+set('extra_artisan_commands', ['db:seed --force']);
+```
+
+```bash
+vendor/bin/dep klytron:laravel:extra-commands
 ```
 
 ## 🎯 Laravel Asset Management
@@ -278,11 +280,10 @@ klytron_configure_project([
 The package provides intelligent Vite asset compilation with automatic Node.js detection and fallback to local builds when needed.
 
 ```php
-// Configure Vite support
+// Configure Vite support (the kit task runs `npm run build` — there are no
+// command-override keys, only the enable/disable flags)
 klytron_configure_project([
     'supports_vite' => true,
-    'vite_build_command' => 'npm run build',
-    'vite_dev_command' => 'npm run dev',
 ]);
 ```
 
@@ -437,25 +438,25 @@ The task automatically:
 ### Laravel Mix Asset Compilation
 
 ```php
-// Configure Mix support
+// Configure Mix support (mix_build_command is read by
+// klytron:laravel:node:mix:build, default 'npm run production')
 klytron_configure_project([
     'supports_mix' => true,
-    'mix_build_command' => 'npm run production',
-    'mix_dev_command' => 'npm run dev',
 ]);
+set('mix_build_command', 'npm run production');
 ```
 
 ### Asset Optimization
 
 ```php
-// Configure asset optimization
+// Configure asset handling (real kit flags only)
 klytron_configure_project([
     'supports_vite' => true,
-    'asset_optimization' => true,
-    'asset_compression' => true,
-    'cdn_enabled' => true,
-    'asset_url' => 'https://cdn.myapp.com',
+    'cleanup_assets' => true,  // remove rogue .htaccess from build output
+    'optimize_images' => true, // compress images in storage/app/public/
 ]);
+// CDN URLs and compression headers are application config — set ASSET_URL in
+// your .env file and configure them on your web server / CDN, not in kit config.
 ```
 
 ## 🎯 Laravel Storage Configuration
@@ -549,7 +550,8 @@ klytron_configure_shared_files([
 ### Passport Installation
 
 ```php
-// Add Passport installation task
+// Add Passport installation task (custom example — the kit ships
+// klytron:laravel:deploy:passport:install, prefer that task)
 task('deploy:laravel:passport_install', function () {
     run('php artisan passport:install');
 })->desc('Install Laravel Passport');
@@ -594,7 +596,8 @@ task('deploy:laravel:maintenance_off', function () {
 ### Performance Optimization
 
 ```php
-// Add optimization tasks
+// Add optimization tasks (custom example — cache/config optimization already
+// runs inside klytron:laravel:deploy:cache:complete, prefer that task)
 task('deploy:laravel:optimize', function () {
     run('php artisan config:cache');
     run('php artisan route:cache');
@@ -608,13 +611,14 @@ task('deploy:laravel:optimize', function () {
 ### Application Health Checks
 
 ```php
-// Add Laravel health checks
+// Add Laravel health checks (custom example — the kit ships
+// klytron:deploy:health_check, prefer that task)
 task('deploy:laravel:health_check', function () {
     $healthChecks = [
         'Application accessible' => 'curl -f http://localhost/health || exit 1',
-        'Database connection' => 'php artisan db:monitor',
-        'Cache working' => 'php artisan cache:test',
-        'Queue working' => 'php artisan queue:monitor',
+        'Database connection' => 'php artisan migrate:status',
+        'Cache working' => 'php artisan about',
+        'Queue working' => 'php artisan queue:failed',
         'Storage accessible' => 'php artisan storage:link',
     ];
 

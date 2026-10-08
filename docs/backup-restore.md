@@ -84,7 +84,7 @@ options — rename the directory afterwards if you need a custom label.
 ```php
 // In your deploy.php — real signature: klytron_configure_database(string $type, array $config)
 klytron_configure_database('mysql', [
-    'import_path' => 'database/live-db-exports', // used by db:import tasks
+    'import_path' => 'database/live-db-exports', // used by klytron:laravel:deploy:db:import
     'supports_migrations' => true,
     'supports_seeders' => true,
 ]);
@@ -157,11 +157,11 @@ partial restore.
 ### Emergency Rollback
 
 ```bash
-# Rollback to previous deployment (includes backup restore)
+# Rollback to previous deployment (Deployer built-in)
 vendor/bin/dep rollback
 
-# Rollback to specific version
-vendor/bin/dep rollback --version=1
+# Roll back to a specific release (Deployer built-in option)
+vendor/bin/dep rollback -o rollback_candidate=123
 ```
 
 ### Manual Restore
@@ -278,9 +278,9 @@ vendor/bin/dep rollback
 
 | Type | Format | Compression |
 |------|--------|-------------|
-| **Database** | `.sql` | `.gz` |
-| **Files** | `.tar` | `.gz` |
-| **Complete** | Directory | `.tar.gz` |
+| **Database** | `.sql` dump | none |
+| **Files** | directory copy of `current` | none |
+| **Complete** | timestamped directory under `backup_path` | none |
 
 ## 📚 Related Documentation
 

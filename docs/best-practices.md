@@ -87,11 +87,10 @@ klytron_configure_host('myapp.com', [
 - Check server resources
 
 ```bash
-# Pre-deployment checklist
-vendor/bin/dep test                    # Test configuration
-vendor/bin/dep test:ssh               # Test SSH connection
-vendor/bin/dep test:database          # Test database connection
-vendor/bin/dep deploy --dry-run       # Simulate deployment
+# Pre-deployment checklist (all real kit/Deployer commands)
+vendor/bin/dep klytron:plan           # Validate config + task graph (no SSH needed)
+vendor/bin/dep klytron:validate:basic # Config checks (paths, domain, env files)
+vendor/bin/dep klytron:deploy:info    # Show resolved deployment info
 ```
 
 ### Deployment Strategy
@@ -158,7 +157,7 @@ klytron_configure_app('my-app', 'git@github.com:user/my-app.git', [
 ```php
 // Configure database via the kit (real keys)
 klytron_configure_database('mysql', [
-    'import_path' => 'database/live-db-exports', // used by db:import tasks
+    'import_path' => 'database/live-db-exports', // used by klytron:laravel:deploy:db:import
     'supports_migrations' => true,
     'supports_seeders' => true,
 ]);
@@ -315,11 +314,10 @@ set('health_check_expected_code', 200);
 - Skip external service checks
 
 ```php
-// Configure health checks
-task('deploy:health_check', function () {
-    run('curl -f http://localhost/health || exit 1');
-    run('php artisan health:check');
-});
+// Health checks run via the kit task klytron:deploy:health_check (HTTP check
+// against application_public_url). Tune it with plain Deployer config:
+set('health_check_timeout', 15);
+set('health_check_expected_code', 200);
 ```
 
 ## 🔄 CI/CD Integration
@@ -380,7 +378,7 @@ echo "Starting deployment..."
 vendor/bin/dep deploy production
 
 echo "Running health checks..."
-vendor/bin/dep deploy:health_check
+vendor/bin/dep klytron:deploy:health_check
 
 echo "Deployment completed successfully!"
 ```

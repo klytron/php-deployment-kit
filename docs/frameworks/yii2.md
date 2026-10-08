@@ -105,6 +105,14 @@ set('db_pass', 'secret');
 
 ### Available Yii2 Tasks
 
+The `task('deploy:yii2:*', ...)` examples further below are per-project
+starting points you own — the kit tasks above are what actually ships
+(`klytron:yii2:migrate`, `klytron:yii2:compile_assets`,
+`klytron:yii2:clear_cache` / `klytron:yii2:warmup_cache`,
+`klytron:yii2:maintenance_enable` / `klytron:yii2:maintenance_disable`,
+`klytron:yii2:health_check`). Custom values they read via `get()` (e.g.
+`yii2_apps`) must be stored with `set()` — they are not kit flags.
+
 #### `klytron:yii2:migrate`
 
 Run Yii2 database migrations.
@@ -573,18 +581,16 @@ klytron_configure_writable_dirs([
 require 'vendor/klytron/php-deployment-kit/deployment-kit.php';
 require 'vendor/klytron/php-deployment-kit/recipes/klytron-yii2-recipe.php';
 
-// Yii2 Basic Template configuration
+// Yii2 Basic Template configuration (real klytron_configure_yii2_app keys)
 klytron_configure_app('my-yii2-basic', 'git@github.com:user/my-yii2-basic.git');
 klytron_set_paths('/var/www', '/var/www/html');
 klytron_set_domain('basic.myapp.com');
 
-klytron_configure_project([
-    'type' => 'yii2',
-    'yii2_app_type' => 'basic',
-    'yii2_apps' => ['web'],
-    'database' => 'mysql',
-    'supports_maintenance' => true,
-    'supports_assets' => true,
+klytron_configure_yii2_app('my-yii2-basic', 'git@github.com:user/my-yii2-basic.git', [
+    'database_type' => 'mysql',
+    'env_file' => '.env.production',
+    'public_dir_path' => 'web',
+    'shared_dir_path' => 'shared',
 ]);
 
 klytron_configure_host('basic.myapp.com', [
