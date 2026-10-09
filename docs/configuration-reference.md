@@ -588,6 +588,7 @@ All keys are plain Deployer config — set them with native `set()`:
 | `skip_opcache_reset` | `false` | `klytron:opcache:reset` — `true` disables the SAPI reset |
 | `health_check_timeout` | `15` (seconds) | `klytron:deploy:health_check` curl `--max-time` |
 | `health_check_expected_code` | `200` (`301`/`302` also pass when `200` is expected) | `klytron:deploy:health_check` |
+| `health_check_fail_on_error` | `false` | `klytron:deploy:health_check` — `true` makes a non-expected code (or connection failure) FAIL the deploy instead of warning. Decided after a green deploy served a 500 homepage: warnings scroll past, failures stop. Default stays warn-only so a flaky edge can't fail an otherwise-good deploy. |
 | `plan_target_task` | `'deploy'` | `klytron:plan` resolves the task graph for this task instead |
 | `default_file_permissions` | `0644` | `klytron:deploy:access_permissions` file mode |
 | `default_dir_permissions` | `0755` (setgid bit OR-ed → `2755`) | `klytron:deploy:access_permissions` dir mode |

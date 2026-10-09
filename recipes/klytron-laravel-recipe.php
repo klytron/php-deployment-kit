@@ -1017,6 +1017,32 @@ task('klytron:laravel:deploy:db:migrate', function () {
             info("🔄 Running SQLite migrations...");
             run('cd {{release_path}} && {{bin/php}} artisan migrate --force');
             info("✅ SQLite database migrations completed successfully");
+
+            // Believe, then verify: a migrate that exits 0 with rows still
+            // pending (wrong database, skipped files, swallowed error) is a
+            // green deploy serving code the schema cannot satisfy. Count and
+            // fail rather than discovering it via a 500 homepage.
+            $pendingLines = 0;
+            try {
+                $status = run('cd {{release_path}} && {{bin/php}} artisan migrate:status');
+                foreach (explode("\n", (string) $status) as $line) {
+                    if (stripos($line, 'pending') !== false) {
+                        $pendingLines++;
+                        warning('  still pending after migrate: ' . trim($line));
+                    }
+                }
+            } catch (\Throwable $ignored) {
+                // Status itself failed — treat as unverified, not as clean.
+                $pendingLines = -1;
+            }
+
+            if ($pendingLines !== 0) {
+                throw new \RuntimeException(
+                    'Migration verification failed: migrations are still pending after migrate --force (see warnings above).'
+                );
+            }
+
+            info("✅ Migration verification passed: nothing pending.");
             
         } catch (\Exception $e) {
             error("❌ SQLite database migration failed: " . $e->getMessage());
@@ -1048,6 +1074,28 @@ task('klytron:laravel:deploy:db:migrate', function () {
             // Run migrations with force flag for production
             run('cd {{release_path}} && {{bin/php}} artisan migrate --force');
             info("✅ Database migrations completed successfully");
+
+            // Same believe-then-verify as the SQLite branch above.
+            $pendingLines = 0;
+            try {
+                $status = run('cd {{release_path}} && {{bin/php}} artisan migrate:status');
+                foreach (explode("\n", (string) $status) as $line) {
+                    if (stripos($line, 'pending') !== false) {
+                        $pendingLines++;
+                        warning('  still pending after migrate: ' . trim($line));
+                    }
+                }
+            } catch (\Throwable $ignored) {
+                $pendingLines = -1;
+            }
+
+            if ($pendingLines !== 0) {
+                throw new \RuntimeException(
+                    'Migration verification failed: migrations are still pending after migrate --force (see warnings above).'
+                );
+            }
+
+            info("✅ Migration verification passed: nothing pending.");
         } catch (\Exception $e) {
             error("❌ Database migration failed: " . $e->getMessage());
 

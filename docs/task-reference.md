@@ -762,7 +762,7 @@ token-gated script, then deletes it. Disable with `set('skip_opcache_reset', tru
 
 ### `klytron:deploy:health_check`
 
-Automated HTTP verification task that ensures the application is live and returning HTTP 200 post-symlink.
+Automated HTTP verification task that ensures the application is live and returning HTTP 200 post-symlink. Warns by default; set `health_check_fail_on_error => true` to fail the deploy on a non-expected code (use when a green-but-broken deploy is worse than a failed one).
 
 **Usage:**
 ```php

@@ -5,6 +5,24 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-10-09
+
+### Fixed
+
+- **Believe-then-verify migrations**: `klytron:laravel:deploy:db:migrate` now
+  counts `Pending` rows via `migrate:status` after a successful `migrate
+  --force` and throws when any remain (both sqlite and other drivers). Decided
+  after a green deploy served a 500 homepage with one migration unapplied and
+  no error anywhere: a migrate that exits 0 is a claim, the status count is
+  the proof.
+
+### Added
+
+- **`health_check_fail_on_error`** (default `false`): opt-in deploy failure
+  when `klytron:deploy:health_check` sees a non-expected code or cannot
+  connect. Warnings scroll past on busy deploy logs; use `true` where a
+  green-but-broken deploy costs more than a red one.
+
 ## [1.2.2] - 2026-10-08
 
 ### Fixed

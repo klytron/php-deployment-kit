@@ -1142,6 +1142,10 @@ task('klytron:deploy:health_check', function () {
     info("🏥 Performing health check on: $url");
     $timeout = get('health_check_timeout', 15);
     $expectedCode = get('health_check_expected_code', 200);
+    // Default warns (a flaky edge must not fail an otherwise-good deploy);
+    // set true and a non-expected code FAILS the deploy. Decided after a
+    // green deploy served a 500 homepage: warnings scroll past, failures stop.
+    $failOnError = (bool) get('health_check_fail_on_error', false);
 
     try {
         $code = run("curl -s -o /dev/null -w '%{http_code}' --max-time $timeout '$url' || echo '000'");
@@ -1149,10 +1153,24 @@ task('klytron:deploy:health_check', function () {
         if ($code == $expectedCode || ($expectedCode == 200 && in_array($code, ['200', '301', '302']))) {
             info("✅ Application health check passed (HTTP $code)");
         } else {
-            warning("⚠️  Application returned HTTP $code (expected $expectedCode) at $url");
+            $message = "Application returned HTTP $code (expected $expectedCode) at $url";
+
+            if ($failOnError) {
+                throw new \RuntimeException("Health check failed: $message");
+            }
+
+            warning("⚠️  $message");
         }
     } catch (\Throwable $e) {
+        if ($e instanceof \RuntimeException && str_starts_with($e->getMessage(), 'Health check failed:')) {
+            throw $e;
+        }
+
         warning("⚠️  Health check could not connect to $url: " . $e->getMessage());
+
+        if ($failOnError) {
+            throw new \RuntimeException("Health check failed: could not connect to $url");
+        }
     }
 })->desc('HTTP health check against the live application URL');
 
