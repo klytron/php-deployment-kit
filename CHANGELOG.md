@@ -5,6 +5,16 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-10-09
+
+### Changed
+
+- **Migrate output echoed into the deploy log**: both drivers now print
+  artisan's own per-migration lines after `migrate --force`. Decided after a
+  skipped-migration incident whose cause could not be reconstructed because
+  the log only said "completed successfully" — next time the log itself says
+  what ran (or that nothing did).
+
 ## [1.2.3] - 2026-10-09
 
 ### Fixed

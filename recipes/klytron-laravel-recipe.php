@@ -1015,8 +1015,18 @@ task('klytron:laravel:deploy:db:migrate', function () {
             
             // Run migrations with force flag for production
             info("🔄 Running SQLite migrations...");
-            run('cd {{release_path}} && {{bin/php}} artisan migrate --force');
+            $migrateOutput = run('cd {{release_path}} && {{bin/php}} artisan migrate --force');
             info("✅ SQLite database migrations completed successfully");
+
+            // Echo the migrator's own report into the deploy log. If a future
+            // deploy ever shows "Nothing to migrate" while rows are pending,
+            // this output (not a reconstructed theory) says what ran.
+            foreach (explode("\n", trim((string) $migrateOutput)) as $migrateLine) {
+                $migrateLine = trim($migrateLine);
+                if ($migrateLine !== '') {
+                    info('  migrate: ' . $migrateLine);
+                }
+            }
 
             // Believe, then verify: a migrate that exits 0 with rows still
             // pending (wrong database, skipped files, swallowed error) is a
@@ -1072,8 +1082,15 @@ task('klytron:laravel:deploy:db:migrate', function () {
         // Handle other database types (MySQL, PostgreSQL, etc.)
         try {
             // Run migrations with force flag for production
-            run('cd {{release_path}} && {{bin/php}} artisan migrate --force');
+            $migrateOutput = run('cd {{release_path}} && {{bin/php}} artisan migrate --force');
             info("✅ Database migrations completed successfully");
+
+            foreach (explode("\n", trim((string) $migrateOutput)) as $migrateLine) {
+                $migrateLine = trim($migrateLine);
+                if ($migrateLine !== '') {
+                    info('  migrate: ' . $migrateLine);
+                }
+            }
 
             // Same believe-then-verify as the SQLite branch above.
             $pendingLines = 0;
