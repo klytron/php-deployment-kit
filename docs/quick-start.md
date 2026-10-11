@@ -274,6 +274,10 @@ Or via environment variable:
 export DEPLOY_USER=deployer
 ```
 
+`DEPLOY_HOST` (and the other `DEPLOY_*` keys) can also live in a gitignored
+`.env.deploy` file instead of being exported — see "Resolution order" in
+`configuration-reference.md`.
+
 ## Unattended / CI deployments
 
 Add these to `deploy.php` to skip interactive prompts:

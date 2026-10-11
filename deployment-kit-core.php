@@ -304,6 +304,192 @@ if (!get('klytron_deployer_loaded', false)) {
     }
 
     /**
+     * Deploy-time env keys the kit resolves from local files.
+     *
+     * Host plus the related options read by klytron_configure_host().
+     * Override per project: set('deploy_env_keys', [...]) in deploy.php.
+     */
+    function klytron_deployEnvKeys(): array {
+        $keys = get('deploy_env_keys', []);
+        if (!is_array($keys) || $keys === []) {
+            $keys = [
+                'DEPLOY_HOST',
+                'DEPLOY_USER',
+                'DEPLOY_PORT',
+                'DEPLOY_BRANCH',
+                'DEPLOY_HTTP_USER',
+                'DEPLOY_HTTP_GROUP',
+            ];
+        }
+        return array_values($keys);
+    }
+
+    /**
+     * Local files searched for DEPLOY_* values, in precedence order.
+     *
+     * The first file defining a key wins; the real process environment always
+     * wins over every file. Override per project:
+     * set('deploy_env_files', ['.env.deploy']) in deploy.php.
+     *
+     * Rationale for the defaults: `.env.deploy` is the dedicated, documented
+     * home (the generator emits `.env.deploy.example` for it); the app env
+     * files are fallbacks so a team that already stores the target host next
+     * to its app config does not need a second file.
+     */
+    function klytron_deployEnvFiles(): array {
+        $files = get('deploy_env_files', []);
+        if (!is_array($files) || $files === []) {
+            $files = [
+                '.env.deploy',
+                '.env.production',
+                '.env',
+            ];
+        }
+        return array_values($files);
+    }
+
+    /**
+     * Parse one deploy-env file into key => value (no side effects).
+     *
+     * Understands the subset of .env syntax that matters for short
+     * deploy-time values: optional `export ` prefix, single/double quotes,
+     * trailing ` # comment` outside quotes, and `${VAR}` interpolation
+     * (resolved from the process env first, then earlier keys in the same
+     * file; left literal when unresolvable). Anything else on a line is
+     * skipped, never fatal.
+     */
+    function klytron_parseDeployEnvFile(string $path): array {
+        $values = [];
+
+        $lines = @file($path, FILE_IGNORE_NEW_LINES);
+        if ($lines === false) {
+            return $values;
+        }
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+
+            if (str_starts_with($line, 'export ')) {
+                $line = trim(substr($line, strlen('export ')));
+            }
+
+            if (!str_contains($line, '=')) {
+                continue;
+            }
+
+            [$rawKey, $rawValue] = explode('=', $line, 2);
+            $key = trim($rawKey);
+
+            if (!preg_match('/\A[A-Za-z_][A-Za-z0-9_]*\z/', $key)) {
+                continue;
+            }
+
+            $value = trim($rawValue);
+            $len = strlen($value);
+
+            if ($len >= 2 && str_starts_with($value, '"') && str_ends_with($value, '"')) {
+                $value = str_replace(['\\"', '\\\\'], ['"', '\\'], substr($value, 1, -1));
+            } elseif ($len >= 2 && str_starts_with($value, "'") && str_ends_with($value, "'")) {
+                $value = substr($value, 1, -1);
+            } else {
+                // Unquoted: cut a trailing comment, but only when the `#`
+                // is preceded by whitespace, so `pass#word` survives.
+                $hashPos = strpos($value, '#');
+                while ($hashPos !== false) {
+                    $before = substr($value, 0, $hashPos);
+                    if ($before !== '' && ctype_space(substr($value, $hashPos - 1, 1))) {
+                        $value = rtrim($before);
+                        break;
+                    }
+                    $hashPos = strpos($value, '#', $hashPos + 1);
+                }
+                $value = trim($value);
+            }
+
+            if (str_contains($value, '${')) {
+                $value = (string) preg_replace_callback(
+                    '/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/',
+                    function ($matches) use ($values) {
+                        $ref = $matches[1];
+                        $fromEnv = getenv($ref);
+                        if ($fromEnv !== false) {
+                            return $fromEnv;
+                        }
+                        return $values[$ref] ?? $matches[0];
+                    },
+                    $value
+                );
+            }
+
+            $values[$key] = $value;
+        }
+
+        return $values;
+    }
+
+    /**
+     * Resolve DEPLOY_* keys from the process env, falling back to local files.
+     *
+     * Precedence per key: real environment > first file (in
+     * klytron_deployEnvFiles() order) that defines it. Resolved file values
+     * are injected via putenv() (+ $_SERVER/$_ENV) so every later getenv()
+     * — including klytron_configure_host() — sees them. Keys already present
+     * in the environment are never touched.
+     *
+     * Missing/unreadable files are silently skipped; disable entirely with
+     * KLYTRON_DEPLOY_ENV_DISABLE=true (CI hermeticity).
+     *
+     * Returns key => ['value' => ..., 'source' => 'environment'|<file>] for
+     * every resolved key. Values are returned, never printed: callers must
+     * not log them (hostnames travel, but the habit must not).
+     */
+    function klytron_loadDeployEnv(array $files = [], array $keys = []): array {
+        if (filter_var(getenv('KLYTRON_DEPLOY_ENV_DISABLE') ?: '', FILTER_VALIDATE_BOOL)) {
+            return [];
+        }
+
+        if ($files === []) {
+            $files = klytron_deployEnvFiles();
+        }
+        if ($keys === []) {
+            $keys = klytron_deployEnvKeys();
+        }
+
+        $resolved = [];
+
+        foreach ($keys as $key) {
+            $fromEnv = getenv($key);
+            if ($fromEnv !== false) {
+                $resolved[$key] = ['value' => $fromEnv, 'source' => 'environment'];
+            }
+        }
+
+        foreach ($files as $file) {
+            if (count($resolved) === count($keys)) {
+                break;
+            }
+            if (!is_file($file) || !is_readable($file)) {
+                continue;
+            }
+            foreach (klytron_parseDeployEnvFile($file) as $key => $value) {
+                if (!in_array($key, $keys, true) || array_key_exists($key, $resolved)) {
+                    continue;
+                }
+                putenv("{$key}={$value}");
+                $_SERVER[$key] = $value;
+                $_ENV[$key] = $value;
+                $resolved[$key] = ['value' => $value, 'source' => $file];
+            }
+        }
+
+        return $resolved;
+    }
+
+    /**
      * Validate that deploy_path_parent is properly configured
      * This prevents deployments to incorrect locations
      */
@@ -620,8 +806,12 @@ if (!get('klytron_deployer_loaded', false)) {
 
     /**
      * Configure host reading hostname and options from environment variables
-     * 
+     *
      * Keeps server literals completely out of deploy.php files.
+     * Resolution order per key (see klytron_loadDeployEnv()):
+     *   1. real process environment (export DEPLOY_HOST=...),
+     *   2. local files (default: .env.deploy, then .env.production, then .env),
+     *   3. the $fallback hostname (when given).
      * Supports:
      * - Hostname: $envVar (default: DEPLOY_HOST) with optional fallback
      * - Remote user: DEPLOY_USER
@@ -629,8 +819,17 @@ if (!get('klytron_deployer_loaded', false)) {
      * - HTTP user: DEPLOY_HTTP_USER
      * - HTTP group: DEPLOY_HTTP_GROUP
      * - SSH port: DEPLOY_PORT
+     *
+     * $options (all optional, backward compatible):
+     * - 'load_files' => false disables file resolution for this call
+     *   (KLYTRON_DEPLOY_ENV_DISABLE=true disables it globally).
+     * - 'files' => [...] / 'keys' => [...] override the searched files/keys.
      */
-    function klytron_configure_host_from_env(string $envVar = 'DEPLOY_HOST', ?string $fallback = null, array $config = []): \Deployer\Host\Host {
+    function klytron_configure_host_from_env(string $envVar = 'DEPLOY_HOST', ?string $fallback = null, array $config = [], array $options = []): \Deployer\Host\Host {
+        if ($options['load_files'] ?? true) {
+            klytron_loadDeployEnv($options['files'] ?? [], $options['keys'] ?? []);
+        }
+
         $hostname = getenv($envVar) ?: null;
         if (empty($hostname)) {
             $hostname = $fallback;
@@ -638,8 +837,9 @@ if (!get('klytron_deployer_loaded', false)) {
 
         if (empty($hostname)) {
             $msg = "❌ CRITICAL ERROR: Environment variable '{$envVar}' is not set and no fallback host provided.\n";
-            $msg .= "💡 Set it before deploying, for example:\n";
-            $msg .= "   export {$envVar}=your-server.example.com\n";
+            $msg .= "💡 Provide it as real env (export {$envVar}=your-server.example.com),\n";
+            $msg .= "   in a local file (.env.deploy, .env.production, or .env),\n";
+            $msg .= "   or pass a fallback: klytron_configure_host_from_env('{$envVar}', 'your-server.example.com')";
             throw new \RuntimeException($msg);
         }
 
