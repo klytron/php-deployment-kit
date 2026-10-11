@@ -87,8 +87,8 @@ klytron_configure_project([
 
 // ── Host ──────────────────────────────────────────────────────────────────────
 // Recommended: read host, user, branch from environment variables (zero server literals in repo)
-// Set DEPLOY_HOST before running: export DEPLOY_HOST=your-server.com
-klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
+// Set DEPLOY_HOST before running: export DEPLOY_HOST=production.example.com
+klytron_configure_host_from_env('DEPLOY_HOST', 'production.example.com', [
     'remote_user' => 'deploy',           // Dedicated non-root user (recommended)
     'branch'      => 'main',             // Git branch deployed from
     'http_user'   => 'www-data',         // Web server user

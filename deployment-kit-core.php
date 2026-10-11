@@ -837,9 +837,9 @@ if (!get('klytron_deployer_loaded', false)) {
 
         if (empty($hostname)) {
             $msg = "❌ CRITICAL ERROR: Environment variable '{$envVar}' is not set and no fallback host provided.\n";
-            $msg .= "💡 Provide it as real env (export {$envVar}=your-server.example.com),\n";
+            $msg .= "💡 Provide it as real env (export {$envVar}=production.example.com),\n";
             $msg .= "   in a local file (.env.deploy, .env.production, or .env),\n";
-            $msg .= "   or pass a fallback: klytron_configure_host_from_env('{$envVar}', 'your-server.example.com')";
+            $msg .= "   or pass a fallback: klytron_configure_host_from_env('{$envVar}', 'production.example.com')";
             throw new \RuntimeException($msg);
         }
 

@@ -391,7 +391,7 @@ touched, and the loader never prints values.
 
 ```php
 // In deploy.php:
-klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
+klytron_configure_host_from_env('DEPLOY_HOST', 'production.example.com', [
     'remote_user' => 'deploy',
     'branch'      => 'main',
     'http_user'   => 'www-data',

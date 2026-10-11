@@ -133,7 +133,7 @@ $publicHtmlPath = klytron_get_public_html_path();
 Configure host with project-specific settings.
 
 ```php
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'deploy',
     'branch' => 'main',
     'http_user' => 'www-data',
@@ -146,7 +146,7 @@ klytron_configure_host('your-server.com', [
 Configure host dynamically from environment variables — and, since v1.3.0, from local files — avoiding hardcoded server credentials in your code repository. Resolution per key: real environment, then `.env.deploy` → `.env.production` → `.env` (first file defining the key wins), then `$fallback`. See "Resolution order" in `configuration-reference.md`.
 
 ```php
-klytron_configure_host_from_env('DEPLOY_HOST', 'fallback-server.com', [
+klytron_configure_host_from_env('DEPLOY_HOST', 'production.example.com', [
     'remote_user' => 'deploy',
     'branch' => 'main',
     'http_user' => 'www-data',
@@ -172,7 +172,7 @@ The default searched files (`['.env.deploy', '.env.production', '.env']`) and ke
 Alternative host configuration function.
 
 ```php
-klytron_host('your-server.com', [
+klytron_host('production.example.com', [
     'remote_user' => 'deploy',
     'branch' => 'main',
 ]);

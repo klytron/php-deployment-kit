@@ -80,7 +80,7 @@ The deployment kit automatically generates paths using the following patterns:
 To prevent hardcoding infrastructure domains, IPs, and usernames into version control, use `klytron_configure_host_from_env()`:
 
 ```php
-klytron_configure_host_from_env('DEPLOY_HOST', 'fallback-server.com', [
+klytron_configure_host_from_env('DEPLOY_HOST', 'production.example.com', [
     'remote_user' => 'deploy',
     'branch'      => 'main',
     'http_user'   => 'www-data',
@@ -90,7 +90,7 @@ klytron_configure_host_from_env('DEPLOY_HOST', 'fallback-server.com', [
 
 When deploying from CI/CD or local terminals:
 ```bash
-DEPLOY_HOST=prod.example.com DEPLOY_BRANCH=main vendor/bin/dep deploy
+DEPLOY_HOST=production.example.com DEPLOY_BRANCH=main vendor/bin/dep deploy
 ```
 
 Or keep the values in a gitignored local file instead of exporting them every

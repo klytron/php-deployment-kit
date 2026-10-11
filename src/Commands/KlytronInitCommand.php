@@ -52,7 +52,7 @@ class KlytronInitCommand extends Command
             $this->newLine();
             $this->comment('Next steps:');
             $this->line('  1. Review and adjust <info>deploy.php</info>');
-            $this->line('  2. Configure environment variables (e.g. <info>export DEPLOY_HOST=your-server.com</info>)');
+            $this->line('  2. Configure environment variables (e.g. <info>export DEPLOY_HOST=production.example.com</info>)');
             $this->line('  3. Validate deployment plan: <info>vendor/bin/dep klytron:plan</info>');
             $this->line('  4. Deploy: <info>vendor/bin/dep deploy</info>');
 

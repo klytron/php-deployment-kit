@@ -91,7 +91,7 @@ vendor/bin/dep klytron:plan
 **Configuration fix:**
 ```php
 // In deploy.php
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'deploy', // Use dedicated deploy user
     'http_user' => 'www-data',
     'writable_mode' => 'chmod',
@@ -290,16 +290,16 @@ set('shouldBackupDatabase', true);
 
 ```bash
 # Test SSH outside Deployer first
-ssh -T deploy@your-server.com
+ssh -T deploy@production.example.com
 
 # Generate a new SSH key (local shell, not a dep task)
-ssh-keygen -t ed25519 -C "deploy@your-server.com"
+ssh-keygen -t ed25519 -C "deploy@production.example.com"
 ```
 
 **Configuration fix:**
 ```php
 // Configure SSH settings
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'ssh_type' => 'native',
     'ssh_arguments' => [
         '-o', 'StrictHostKeyChecking=no',
@@ -328,7 +328,7 @@ vendor/bin/dep klytron:plan
 **Configuration fix:**
 ```php
 // Specify SSH key path
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'ssh_key_file' => '/path/to/private/key',
     'ssh_public_key_file' => '/path/to/public/key',
 ]);
@@ -355,7 +355,7 @@ vendor/bin/dep klytron:deploy:laravel:access_permissions
 **Configuration fix:**
 ```php
 // Configure permissions
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'writable_mode' => 'chmod',
     'writable_use_sudo' => true,
     'writable_dirs' => [
@@ -404,7 +404,7 @@ vendor/bin/dep klytron:validate:basic
 // Ensure all required settings
 klytron_configure_app('my-app', 'git@github.com:user/my-app.git');
 klytron_set_paths('/var/www', '/var/www/html');
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'deploy',
     'http_user' => 'www-data',
 ]);

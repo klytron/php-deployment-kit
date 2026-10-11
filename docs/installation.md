@@ -243,13 +243,13 @@ GRANT ALL PRIVILEGES ON DATABASE myapp TO myapp_user;
 
 ```bash
 # Generate SSH key pair
-ssh-keygen -t rsa -b 4096 -C "deploy@your-server.com"
+ssh-keygen -t rsa -b 4096 -C "deploy@production.example.com"
 
 # Copy public key to server
-ssh-copy-id -i ~/.ssh/id_rsa.pub user@your-server.com
+ssh-copy-id -i ~/.ssh/id_rsa.pub user@production.example.com
 
 # Test SSH connection
-ssh user@your-server.com
+ssh user@production.example.com
 ```
 
 ## ⚙️ Configuration
@@ -290,7 +290,7 @@ klytron_configure_project([
 ]);
 
 // Configure host
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'deploy',
     'http_user' => 'www-data',
 ]);
@@ -340,7 +340,7 @@ chmod 600 ~/.ssh/id_rsa
 chmod 644 ~/.ssh/id_rsa.pub
 
 # Test SSH connection manually
-ssh -T user@your-server.com
+ssh -T user@production.example.com
 ```
 
 #### Issue: PHP Extension Missing
