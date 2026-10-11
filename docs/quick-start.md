@@ -58,7 +58,7 @@ klytron_configure_project([
 ]);
 
 // Your server
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'deploy',
     'branch'      => 'main',
     'http_user'   => 'www-data',
@@ -126,7 +126,7 @@ klytron_set_php_version('php8.3');
 
 klytron_configure_project(['type' => 'php', 'database' => 'none']);
 
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'deploy',
     'branch'      => 'main',
     'http_user'   => 'www-data',
@@ -264,7 +264,7 @@ sudo chmod 0440 /etc/sudoers.d/deployer
 Specify `remote_user` in host configuration or set `DEPLOY_USER`:
 
 ```php
-klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
+klytron_configure_host_from_env('DEPLOY_HOST', 'production.example.com', [
     'remote_user' => 'deployer',
 ]);
 ```

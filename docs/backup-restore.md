@@ -241,7 +241,7 @@ set('shouldBackupDatabase', true);
 vendor/bin/dep klytron:deploy:info
 
 # Check available disk space on the server before retrying
-ssh deploy@your-server.com 'df -h /var/www'
+ssh deploy@production.example.com 'df -h /var/www'
 ```
 
 #### Database Backup Issues
@@ -258,7 +258,7 @@ mysql -h <db-host> -u <db-user> -p -e 'SELECT 1'
 
 ```bash
 # List snapshots on the server (backup_path defaults to {{deploy_path}}/backups)
-ssh deploy@your-server.com 'ls -la /var/www/<app>/backups'
+ssh deploy@production.example.com 'ls -la /var/www/<app>/backups'
 
 # Roll back to the previous release (Deployer built-in)
 vendor/bin/dep rollback

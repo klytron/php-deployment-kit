@@ -51,10 +51,10 @@ klytron_set_php_version('php8.3');      // PHP binary used for php commands
 
 // ── Host ──────────────────────────────────────────────────────────────────────
 // Recommended: read host, user, branch from environment variables (zero server literals in repo)
-// Provide DEPLOY_HOST via export (export DEPLOY_HOST=your-server.com)
+// Provide DEPLOY_HOST via export (export DEPLOY_HOST=production.example.com)
 // or a gitignored .env.deploy file (see generated .env.deploy.example);
 // files are read as fallback: .env.deploy, then .env.production, then .env
-klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
+klytron_configure_host_from_env('DEPLOY_HOST', 'production.example.com', [
     'remote_user' => 'deploy',   // Dedicated non-root deploy user (recommended)
     'branch'      => 'main',     // Git branch to deploy
     'http_user'   => 'www-data', // Web server user (for permissions)

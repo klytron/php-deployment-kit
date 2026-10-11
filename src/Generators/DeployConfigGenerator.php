@@ -65,7 +65,7 @@ class DeployConfigGenerator
             "'your-project-name'" => "'{$appName}'",
             "'git@github.com:your-org/your-project.git'" => "'{$repo}'",
             "'your-domain.com'" => "'{$domain}'",
-            "'your-server.com'" => "'{$host}'",
+            "'production.example.com'" => "'{$host}'",
         ];
 
         return strtr($content, $replacements);
@@ -79,7 +79,7 @@ class DeployConfigGenerator
      */
     public function generateEnvExample(array $options = []): string
     {
-        $host = $options['host'] ?? 'your-server.com';
+        $host = $options['host'] ?? 'production.example.com';
         $user = $options['user'] ?? 'deploy';
         $branch = $options['branch'] ?? 'main';
         $port = $options['port'] ?? 22;

@@ -153,7 +153,7 @@ klytron_set_paths(
 klytron_set_domain('your-domain.com');
 
 // Update host configuration
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'your-user',
     'http_user' => 'your-web-user',
     'http_group' => 'your-web-group',

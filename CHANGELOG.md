@@ -5,6 +5,19 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-10-11
+
+### Changed
+
+- **Generic example hostnames everywhere**: every `deploy.php` example,
+  template, generator default, CLI hint and doc snippet now uses
+  `production.example.com` instead of a mix of `your-server.com`,
+  `fallback-server.com`, `prod.example.com` and `yourdomain.com`.
+  Reserved `.example.com` names can never be mistaken for real private
+  infrastructure, so copying an example can no longer leak infra naming
+  into a consumer repo. No behaviour change (comments, defaults and docs
+  only).
+
 ## [1.3.0] - 2026-10-11
 
 ### Added

@@ -104,7 +104,7 @@ klytron_configure_app('my-app', 'git@github.com:user/my-app.git', [
 
 ```php
 // Configure host
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'deploy',
     'http_user' => 'www-data',
     'http_group' => 'www-data',
@@ -129,7 +129,7 @@ Yes! You can configure multiple environments:
 
 ```php
 // Production
-klytron_configure_host('prod.example.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'deploy',
     'labels' => ['stage' => 'production'],
 ]);
@@ -147,7 +147,7 @@ klytron_configure_host('staging.example.com', [
 
 1. **Check SSH connection**:
    ```bash
-   ssh user@your-server.com
+   ssh user@production.example.com
    ```
 
 2. **Check server resources**:
@@ -209,7 +209,7 @@ Zero-downtime deployments are enabled by default. The deployment process:
 
 ```php
 // Configure proper permissions
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'deploy',
     'http_user' => 'www-data',
     'writable_mode' => 'chmod',
@@ -281,7 +281,7 @@ klytron_configure_project([
 **Solution**: Configure proper user permissions:
 
 ```php
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'deploy', // Use dedicated deploy user
     'http_user' => 'www-data',
     'writable_mode' => 'chmod',
@@ -335,7 +335,7 @@ ssh-keygen -t rsa -b 4096 -C "your-email@example.com"
 ssh-add ~/.ssh/id_rsa
 
 # Copy to server
-ssh-copy-id user@your-server.com
+ssh-copy-id user@production.example.com
 ```
 
 ## ⚡ Performance & Optimization

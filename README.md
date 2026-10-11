@@ -84,7 +84,7 @@ require __DIR__ . '/vendor/klytron/php-deployment-kit/recipes/klytron-laravel-re
 
 klytron_configure_app('my-app', 'git@github.com:your-username/my-app.git');
 klytron_set_paths('/var/www', '/var/www/${APP_URL_DOMAIN}/public_html');
-klytron_set_domain('yourdomain.com');
+klytron_set_domain('production.example.com');
 klytron_set_php_version('php8.3');
 
 klytron_configure_project([
@@ -98,7 +98,7 @@ klytron_configure_project([
 
 // Host credentials read from DEPLOY_HOST env variable with fallback
 // (or from .env.deploy / .env.production / .env files — see docs)
-klytron_configure_host_from_env('DEPLOY_HOST', 'yourdomain.com', [
+klytron_configure_host_from_env('DEPLOY_HOST', 'production.example.com', [
     'remote_user' => 'deploy',
     'branch'      => 'main',
     'http_user'   => 'www-data',

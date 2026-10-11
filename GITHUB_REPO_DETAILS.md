@@ -91,10 +91,10 @@ require 'vendor/klytron/php-deployment-kit/recipes/laravel.php';
 
 klytron_configure_app('my-app', 'git@github.com:user/my-app.git');
 klytron_set_paths('/var/www', '/var/www/html');
-klytron_set_domain('yourdomain.com');
+klytron_set_domain('production.example.com');
 klytron_set_php_version('php8.3');
 
-klytron_configure_host('your-server.com', [
+klytron_configure_host('production.example.com', [
     'remote_user' => 'root',
     'http_user' => 'www-data',
 ]);

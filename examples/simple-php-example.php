@@ -39,8 +39,8 @@ klytron_set_php_version('php8.3');
 
 // ── Host ──────────────────────────────────────────────────────────────────────
 // Recommended: read host, user, branch from environment variables
-// Set DEPLOY_HOST before running: export DEPLOY_HOST=your-server.com
-klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
+// Set DEPLOY_HOST before running: export DEPLOY_HOST=production.example.com
+klytron_configure_host_from_env('DEPLOY_HOST', 'production.example.com', [
     'remote_user' => 'deploy',
     'branch'      => 'main',
     'http_user'   => 'www-data',

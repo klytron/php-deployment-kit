@@ -152,7 +152,7 @@ switch ($command) {
             }
             echo "\n\033[1;33mNext steps:\033[0m\n";
             echo "  1. Review and adjust \033[1mdeploy.php\033[0m\n";
-            echo "  2. Configure environment variables (e.g. \033[1mexport DEPLOY_HOST=your-server.com\033[0m)\n";
+            echo "  2. Configure environment variables (e.g. \033[1mexport DEPLOY_HOST=production.example.com\033[0m)\n";
             echo "  3. Validate deployment plan: \033[1mvendor/bin/klytron plan\033[0m or \033[1mvendor/bin/dep klytron:plan\033[0m\n";
             echo "  4. Deploy: \033[1mvendor/bin/dep deploy\033[0m\n\n";
             exit(0);
