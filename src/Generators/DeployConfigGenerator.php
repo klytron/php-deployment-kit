@@ -86,7 +86,8 @@ class DeployConfigGenerator
 
         return <<<ENV
 # Deployment Configuration Environment Variables
-# Copy to .env.deploy or export in your CI/CD environment.
+# Copy to .env.deploy (gitignored, auto-loaded) or export in your CI/CD environment.
+# Precedence per key: real environment > .env.deploy > .env.production > .env.
 
 DEPLOY_HOST={$host}
 DEPLOY_USER={$user}

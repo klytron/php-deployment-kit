@@ -5,6 +5,22 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-11
+
+### Added
+
+- **File-based `DEPLOY_*` resolution**: `klytron_configure_host_from_env()`
+  now falls back to local files when a key is not exported — `.env.deploy`
+  first, then `.env.production`, then `.env` (first file defining a key wins;
+  the real environment always wins over files). New helpers
+  `klytron_loadDeployEnv()`, `klytron_parseDeployEnvFile()`,
+  `klytron_deployEnvFiles()` and `klytron_deployEnvKeys()`; per-call opt-out
+  via `['load_files' => false]`, global opt-out via
+  `KLYTRON_DEPLOY_ENV_DISABLE=true`, project overrides via the
+  `deploy_env_files` / `deploy_env_keys` settings. Decided after the
+  generator's `.env.deploy.example` turned out to describe a file nothing
+  read: the example is now a promise the kit keeps.
+
 ## [1.2.4] - 2026-10-09
 
 ### Changed

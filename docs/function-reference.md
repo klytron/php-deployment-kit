@@ -142,8 +142,8 @@ klytron_configure_host('your-server.com', [
 ]);
 ```
 
-#### `klytron_configure_host_from_env(string $envVar = 'DEPLOY_HOST', ?string $fallback = null, array $config = [])`
-Configure host dynamically from environment variables, avoiding hardcoded server credentials in your code repository.
+#### `klytron_configure_host_from_env(string $envVar = 'DEPLOY_HOST', ?string $fallback = null, array $config = [], array $options = [])`
+Configure host dynamically from environment variables — and, since v1.3.0, from local files — avoiding hardcoded server credentials in your code repository. Resolution per key: real environment, then `.env.deploy` → `.env.production` → `.env` (first file defining the key wins), then `$fallback`. See "Resolution order" in `configuration-reference.md`.
 
 ```php
 klytron_configure_host_from_env('DEPLOY_HOST', 'fallback-server.com', [
@@ -154,6 +154,19 @@ klytron_configure_host_from_env('DEPLOY_HOST', 'fallback-server.com', [
     'labels' => ['stage' => 'production'],
 ]);
 ```
+
+#### `klytron_loadDeployEnv(array $files = [], array $keys = []): array`
+Resolve `DEPLOY_*` keys from the environment with local-file fallback and inject file values into the process env (via `putenv()` + `$_SERVER`/`$_ENV`) so later `getenv()` calls see them. Empty `$files`/`$keys` fall back to the `deploy_env_files` / `deploy_env_keys` settings, then the built-in defaults. Missing files are skipped; `KLYTRON_DEPLOY_ENV_DISABLE=true` disables entirely. Returns `key => ['value' => ..., 'source' => 'environment'|<file>]` — values are returned, never printed.
+
+```php
+$resolved = klytron_loadDeployEnv(); // e.g. ['DEPLOY_HOST' => ['value' => '...', 'source' => '.env.deploy']]
+```
+
+#### `klytron_parseDeployEnvFile(string $path): array`
+Parse one env file into `key => value` with no side effects. Handles `export ` prefixes, single/double quotes, trailing ` # comments` outside quotes, and `${VAR}` interpolation (env first, then earlier keys in the same file). Malformed lines are skipped, never fatal.
+
+#### `klytron_deployEnvFiles(): array` / `klytron_deployEnvKeys(): array`
+The default searched files (`['.env.deploy', '.env.production', '.env']`) and keys (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PORT`, `DEPLOY_BRANCH`, `DEPLOY_HTTP_USER`, `DEPLOY_HTTP_GROUP`), honouring the `deploy_env_files` / `deploy_env_keys` settings. Never fatal on bad config — non-array or empty settings fall back to the built-ins.
 
 #### `klytron_host(string $hostname, array $config = [])`
 Alternative host configuration function.

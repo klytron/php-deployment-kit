@@ -97,6 +97,7 @@ klytron_configure_project([
 ]);
 
 // Host credentials read from DEPLOY_HOST env variable with fallback
+// (or from .env.deploy / .env.production / .env files — see docs)
 klytron_configure_host_from_env('DEPLOY_HOST', 'yourdomain.com', [
     'remote_user' => 'deploy',
     'branch'      => 'main',

@@ -354,7 +354,8 @@ Configure host settings dynamically from environment variables, eliminating hard
 klytron_configure_host_from_env(
     string $envVar = 'DEPLOY_HOST',       // Environment variable name for the host
     ?string $fallback = null,             // Fallback hostname when the env var is unset (null = abort with a clear error)
-    array $config = []                     // Default host configuration overrides
+    array $config = [],                   // Default host configuration overrides
+    array $options = []                   // File-resolution options (see below)
 );
 ```
 
@@ -366,7 +367,28 @@ klytron_configure_host_from_env(
 - `DEPLOY_HTTP_GROUP`: Web server group (overrides `$config['http_group']`)
 - `DEPLOY_PORT`: SSH port (overrides `$config['port']`)
 
-**Example:**
+**Resolution order (per key):**
+
+1. **Real process environment** — `export DEPLOY_HOST=...` or inline
+   `DEPLOY_HOST=... vendor/bin/dep deploy`. Always wins.
+2. **Local files**, first file defining the key wins (missing files are
+   silently skipped):
+   - `.env.deploy` — the dedicated home (run `vendor/bin/klytron init` to
+     generate `.env.deploy.example` as a starting point; keep the real file
+     gitignored, never committed).
+   - `.env.production` — fallback for teams that already keep the target
+     host next to their app config.
+   - `.env` — last resort (usually local-dev values; only relied upon when
+     nothing else defines the key).
+3. **The `$fallback` hostname** — when given; otherwise the deploy aborts
+   with an error naming every source it tried.
+
+File values are injected into the process env before the host is built, so
+`DEPLOY_USER`/`DEPLOY_BRANCH`/etc. from files flow into
+`klytron_configure_host()` exactly like exports do. Only the six
+`DEPLOY_*` keys above are ever read from files — your app secrets are not
+touched, and the loader never prints values.
+
 ```php
 // In deploy.php:
 klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
@@ -382,6 +404,29 @@ klytron_configure_host_from_env('DEPLOY_HOST', 'your-server.com', [
 // export DEPLOY_BRANCH=release-v1.1
 // vendor/bin/dep deploy
 ```
+
+**Customising the file search** (in `deploy.php`, before the host call):
+
+```php
+set('deploy_env_files', ['.env.deploy']);            // search only this file
+set('deploy_env_keys', ['DEPLOY_HOST', 'DEPLOY_USER']); // ...for only these keys
+```
+
+Per-call equivalents (4th argument, existing 3-argument calls unaffected):
+
+```php
+klytron_configure_host_from_env('DEPLOY_HOST', null, [], [
+    'files' => ['.env.deploy'],
+    'load_files' => true,   // false = environment + fallback only
+]);
+```
+
+Set `KLYTRON_DEPLOY_ENV_DISABLE=true` to switch file resolution off
+globally (e.g. hermetic CI where only exported vars may count).
+
+> ⚠️ `.env.production` values used this way are still uploaded to the server
+> as the app's `.env` (that is its job). Hostnames and usernames are not
+> secrets, but keep real secrets out of `DEPLOY_*` keys as a habit.
 
 ## 🎯 Shared Files and Directories
 
