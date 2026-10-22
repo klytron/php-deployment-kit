@@ -34,7 +34,7 @@ set('server_config_files', [
         'source' => 'server/.htaccess.production',
         'target' => 'public/.htaccess',
         'symlink' => false,  // Set to true to create a symlink instead of copying
-        'mode' => 0644      // Optional: set file permissions
+        'mode' => '0644'    // Optional: set file permissions ('0644' or 0644)
     ],
     [
         'source' => 'server/nginx-site.conf',
@@ -44,7 +44,7 @@ set('server_config_files', [
     [
         'source' => 'server/php.ini',
         'target' => 'shared/php.ini',
-        'mode' => 0644
+        'mode' => '0644'
     ]
 ]);
 
@@ -59,7 +59,7 @@ Each file configuration can have the following options:
 - `source`: (string, required) Path to the source file relative to the project root
 - `target`: (string, required) Path where the file should be deployed, relative to the release path
 - `symlink`: (bool, optional) If true, creates a symlink instead of copying the file (default: false)
-- `mode`: (int, optional) File permissions in octal format (e.g., 0644, 0755)
+- `mode`: (string|int, optional) File permissions in octal format (e.g., `'0644'`, `'0755'`, or integer `0644`). Both string and integer octal representations are supported and normalized for `chmod`.
 
 ## Example: Laravel Project
 
@@ -70,7 +70,7 @@ set('server_config_files', [
     [
         'source' => 'server/.htaccess.production',
         'target' => 'public/.htaccess',
-        'mode' => 0644
+        'mode' => '0644'
     ],
     [
         'source' => 'server/nginx-site.conf',

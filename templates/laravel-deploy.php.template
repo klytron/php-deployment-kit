@@ -155,7 +155,7 @@ set('server_config_files', [
     [
         'source'    => 'server/.htaccess.production', // Relative to project root
         'target'    => 'public/.htaccess',            // Relative to release_path
-        'mode'      => 0644,
+        'mode'      => '0644',
         'overwrite' => true,
     ],
     // Add more entries as needed:

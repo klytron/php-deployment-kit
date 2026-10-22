@@ -732,7 +732,7 @@ klytron_configure_writable_dirs([
 ]);
 
 set('server_config_files', [
-    ['source' => 'server/.htaccess.production', 'target' => 'public/.htaccess', 'mode' => 0644, 'overwrite' => true],
+    ['source' => 'server/.htaccess.production', 'target' => 'public/.htaccess', 'mode' => '0644', 'overwrite' => true],
 ]);
 
 task('deploy', [

@@ -300,7 +300,7 @@ set('server_config_files', [
     [
         'source'    => 'server/.htaccess.production',
         'target'    => 'public/.htaccess',
-        'mode'      => 0644,
+        'mode'      => '0644',
         'overwrite' => true,
     ],
 ]);

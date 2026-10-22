@@ -44,7 +44,7 @@ task('klytron:server:deploy:configs', function () {
             'source' => 'server/.htaccess.production',
             'target' => 'public/.htaccess',
             'symlink' => false,
-            'mode' => 0644,
+            'mode' => '0644',
             'overwrite' => true
         ]
     ];
@@ -61,7 +61,8 @@ task('klytron:server:deploy:configs', function () {
         $target = rtrim($basePath, '/') . '/' . ltrim($config['target'], '/');
         $sourcePath = rtrim($basePath, '/') . '/' . ltrim($source, '/');
         $symlink = $config['symlink'] ?? false;
-        $mode = $config['mode'] ?? 0644;
+        $mode = $config['mode'] ?? '0644';
+        $modeStr = is_int($mode) ? sprintf('%04o', $mode) : (string) $mode;
         $owner = $config['owner'] ?? $httpUser;
         $group = $config['group'] ?? $httpGroup;
         $overwrite = $config['overwrite'] ?? true;
@@ -103,7 +104,7 @@ task('klytron:server:deploy:configs', function () {
         }
         
         // Set file permissions and ownership
-        run("chmod $mode $target");
+        run("chmod $modeStr $target");
         run("chown $owner:$group $target");
         
         // Ensure parent directory has correct permissions
