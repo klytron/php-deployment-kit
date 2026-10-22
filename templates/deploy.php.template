@@ -128,7 +128,7 @@ klytron_configure_writable_dirs([
 // Files copied from your repo into the release on every deploy.
 
 // set('server_config_files', [
-//     ['source' => 'server/.htaccess.production', 'target' => 'public/.htaccess', 'mode' => 0644, 'overwrite' => true],
+//     ['source' => 'server/.htaccess.production', 'target' => 'public/.htaccess', 'mode' => '0644', 'overwrite' => true],
 // ]);
 
 // ── Unattended deployment (optional) ─────────────────────────────────────────

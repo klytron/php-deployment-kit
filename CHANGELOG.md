@@ -5,6 +5,20 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-10-22
+
+### Fixed
+
+- **Octal file permission mode formatting in `klytron:server:deploy:configs`**:
+  Integer octal file modes in `server_config_files` (such as `0644` or `0755`)
+  are now properly formatted as octal strings via `sprintf('%04o', $mode)`
+  before passing to `chmod`. In PHP, integer literal `0644` evaluates to decimal
+  `420`; without formatting, string interpolation previously executed
+  `chmod 420 <target>` on the remote host (octal `0420` / `-r---w----`), stripping
+  group and other read permissions on files like `.htaccess` and causing web
+  servers (e.g. Apache) to fail requests with HTTP 403 Forbidden. Both string modes
+  (`'0644'`) and octal integer literals (`0644`) are now supported and normalized.
+
 ## [1.3.1] - 2026-10-11
 
 ### Changed

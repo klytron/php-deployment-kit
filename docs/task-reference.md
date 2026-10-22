@@ -1002,7 +1002,7 @@ via `readlink -f` and skipping broken symlinks; `.env` set to `640`.
 
 ```php
 set('server_config_files', [
-    ['source' => 'server/.htaccess.production', 'target' => 'public/.htaccess', 'mode' => 0644, 'overwrite' => true],
+    ['source' => 'server/.htaccess.production', 'target' => 'public/.htaccess', 'mode' => '0644', 'overwrite' => true],
 ]);
 after('deploy:shared', 'klytron:server:deploy:configs');
 ```
