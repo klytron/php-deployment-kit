@@ -14,6 +14,7 @@ use Klytron\PhpDeploymentKit\Tasks\ImageOptimizationTask;
 use Klytron\PhpDeploymentKit\Tasks\DeploymentMetricsTask;
 use Klytron\PhpDeploymentKit\Tasks\EnvironmentDecryptTask;
 use Klytron\PhpDeploymentKit\Services\DeploymentMetricsService;
+use Deployer\Exception\GracefulShutdownException;
 
 ///////////////////////////////////////////////////////////////////////////////
 // CHECK IF DEPLOYER FUNCTIONS ARE AVAILABLE
@@ -494,7 +495,7 @@ task('klytron:deploy:info', function () {
  *
  * Covers both:
  *  - systemd php-fpm pools (`systemctl reload phpX.Y-fpm`)
- *  - Virtualmin / php-cgi FCGI wrappers (domain `fcgi-bin/phpX.Y.fcgi`), which keep a
+ *  - Hosting-panel / php-cgi FCGI wrappers (domain `fcgi-bin/phpX.Y.fcgi`), which keep a
  *    separate OPcache that systemctl reload does NOT touch
  */
 task('klytron:fpm:reload', function () {
@@ -510,12 +511,12 @@ task('klytron:fpm:reload', function () {
         warning("⚠️ Could not reload PHP-FPM service: " . $e->getMessage());
     }
 
-    // Always try SAPI-level OPcache reset for Virtualmin php-cgi / edge cases
+    // Always try SAPI-level OPcache reset for panel-managed php-cgi FCGI / edge cases
     invoke('klytron:opcache:reset');
-})->desc('Reload PHP-FPM and reset OPcache (incl. Virtualmin php-cgi)');
+})->desc('Reload PHP-FPM and reset OPcache (incl. php-cgi FCGI)');
 
 /**
- * Reset OPcache via the live site SAPI (works for Virtualmin FCGI php-cgi).
+ * Reset OPcache via the live site SAPI (works for panel-managed FCGI php-cgi).
  * Drops a one-shot script under public/, hits it over HTTP(S), then deletes it.
  */
 task('klytron:opcache:reset', function () {
@@ -586,7 +587,7 @@ task('klytron:opcache:reset', function () {
     }
 
     info('✅ OPcache reset step finished');
-})->desc('Reset OPcache via site SAPI (Virtualmin FCGI safe)');
+})->desc('Reset OPcache via site SAPI (php-cgi FCGI safe)');
 task('klytron:system:restart', function () {
     static $alreadyExecuted = false;
     if ($alreadyExecuted) {
@@ -673,7 +674,7 @@ fi
 # symlink so children are covered in both layouts; -maxdepth 1 + -type l
 # keeps it to inodes only, never followed, never recursive.
 # (v1.1.9 guarded on [ ! -L ], which skipped exactly the symlinked layout
-# every Virtualmin consumer has — fixed here.)
+# every panel-managed FCGI consumer has — fixed here.)
 if [ -n "\$PUBLIC_HTML" ] && [ -e "\$PUBLIC_HTML" ]; then
   echo "→ chown served-dir child symlinks..."
   sudo find -H "\$PUBLIC_HTML" -maxdepth 1 -type l -exec chown -h "\$HTTP_USER:\$HTTP_GROUP" {} + 2>/dev/null || true
@@ -1264,8 +1265,124 @@ task('klytron:deploy:finalize:complete', [
 // GENERIC DEPLOYMENT HOOKS
 ///////////////////////////////////////////////////////////////////////////////
 
-// Generic deployment failure handling - ensures deploy:unlock is always called
-after('deploy:failed', 'deploy:unlock');
+// ---------------------------------------------------------------------------
+// CONCURRENT DEPLOY GUARD
+//
+// The whole pipeline runs through one shared staging symlink
+// ({{deploy_path}}/release) that deploy:release creates and deploy:symlink
+// atomically moves onto current. A deploy that starts while another is still
+// running therefore corrupts the staging symlink for both runs: the slower
+// deploy symptoms — "mv: cannot stat '{{deploy_path}}/release'".
+//
+// Deployer's remote lock prevents overlap, but only if nothing silently
+// clears it while another deploy is still running. Two guards keep the lock
+// honest:
+//
+//   1. klytron:deploy:smart_unlock — used at flow start instead of a blank
+//      deploy:unlock. Auto-clears ONLY a provably stale lock
+//      (klytron_stale_lock_minutes, default 120; set 0 to never auto-clear),
+//      and fails fast with an actionable message when a live lock is found.
+//   2. klytron:deploy:failed_unlock_guard — failure hook that only removes
+//      the lock if THIS run had acquired it, so an aborted pre-lock run can
+//      never erase the lock that belongs to a concurrent deploy.
+//
+// Note: the acquired-lock marker uses deployer's local set()/get() state,
+// which is per-process. With multiple hosts, per-host workers do not see
+// each other's markers; the guard then behaves conservatively (leaves the
+// lock for manual review), which is the safe default.
+// ---------------------------------------------------------------------------
+
+/**
+ * How long a deploy.lock may sit untouched before a new deploy may clear it.
+ * 0 disables auto-clearing entirely (operator must run deploy:unlock).
+ */
+set('klytron_stale_lock_minutes', 120);
+
+/**
+ * Runs in place of a blank deploy:unlock at flow start.
+ * - No lock present  → proceed (and keep the lock untouched).
+ * - Stale lock       → clear it with a visible warning.
+ * - Live lock        → abort with actionable guidance instead of racing.
+ */
+task('klytron:deploy:smart_unlock', function () {
+    $deployPath = get('deploy_path');
+    $lockPath = "$deployPath/.dep/deploy.lock";
+
+    if (!test("[ -f '$lockPath' ]")) {
+        info('🔓 No deploy lock present — proceeding.');
+
+        return;
+    }
+
+    $lockMtime = (int) trim(run("[ -f '$lockPath' ] && stat -c %Y '$lockPath' 2>/dev/null || echo 0"));
+    $staleMinutes = (int) get('klytron_stale_lock_minutes', 120);
+
+    if ($lockMtime > 0 && $staleMinutes > 0 && (time() - $lockMtime) >= ($staleMinutes * 60)) {
+        warning("⏰ Deploy lock is stale (older than $staleMinutes minutes) — clearing it before deploying.");
+        run("rm -f '$lockPath'");
+
+        return;
+    }
+
+    $lockedUser = trim((string) run("cat '$lockPath'"));
+    $ageLabel = $lockMtime > 0
+        ? sprintf('%d minutes old', (int) ((time() - $lockMtime) / 60))
+        : 'of unknown age';
+    $holder = $lockedUser !== '' ? $lockedUser : 'unknown';
+
+    throw new GracefulShutdownException(
+        "Another deploy appears to be running (lock holds '{$holder}', $ageLabel).\n\n" .
+        "Overlapping deploys corrupt the shared staging symlink, so this run stopped before touching anything.\n" .
+        "Wait for the other deploy to finish. If the lock is truly stale, clear it manually:\n" .
+        "  vendor/bin/dep deploy:unlock"
+    );
+})->desc('Clears stale deploy locks; refuses to clear a live lock another deploy owns');
+
+/**
+ * Marks (in-process) that THIS run acquired its own deploy lock, so the
+ * failure hook can distinguish its own lock from a foreign one.
+ */
+task('klytron:deploy:mark_lock_acquired', function () {
+    set('klytron_own_lock_acquired', true);
+});
+after('deploy:lock', 'klytron:deploy:mark_lock_acquired');
+
+/**
+ * Failure hook: only releases the lock when this run acquired it. Replaces
+ * the previous unconditional post-failure raw unlock, which erased a
+ * concurrent deployer's live lock whenever any pre-lock task failed.
+ */
+task('klytron:deploy:failed_unlock_guard', function () {
+    if (get('klytron_own_lock_acquired')) {
+        run("rm -f " . get('deploy_path') . "/.dep/deploy.lock");
+        info('🔓 Deploy lock released (this run owned it).');
+    } else {
+        warning('🔒 Deploy lock left untouched — this failed run never acquired it.');
+    }
+});
+after('deploy:failed', 'klytron:deploy:failed_unlock_guard');
+
+/**
+ * Runs immediately before deploy:symlink. If the staging symlink vanished
+ * (a concurrent deploy moved it onto current), stop with a clear message
+ * instead of deployer's bare "mv: cannot stat .../release".
+ */
+task('klytron:deploy:verify_staging', function () {
+    $deployPath = get('deploy_path');
+
+    if (!test("[ -e '$deployPath/release' ]")) {
+        throw new GracefulShutdownException(
+            "Staging symlink {{deploy_path}}/release is missing.\n\n" .
+            "A concurrent deploy most likely moved it onto 'current' mid-flight, so\n" .
+            '"current" is NOT pointing at this run\'s code.\n' .
+            "Let the other deploy finish, then run this deploy again.\n" .
+            "Nothing was switched for this run."
+        );
+    }
+})->desc('Verifies the staging symlink still exists right before the atomic switch');
+
+// Generic deployment failure handling is provided by
+// klytron:deploy:failed_unlock_guard above (owned-lock-only unlock).
 
 ///////////////////////////////////////////////////////////////////////////////
 // PROJECT MANAGEMENT TASKS

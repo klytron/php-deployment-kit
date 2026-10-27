@@ -5,6 +5,35 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-10-27
+
+### Fixed
+
+- **Concurrent deploy guard — overlapping deploys no longer corrupt or erase
+  each other**: Every deploy flow began with an unconditional `deploy:unlock`
+  that erased a deployment still holding the remote lock, and the failure hook
+  (`deploy:failed`) did the same; two overlapping runs then shared the single
+  staging symlink (Deployer v7's atomic switch consumes
+  `{{deploy_path}}/release`), making the slower run fail with
+  `mv: cannot stat '<deploy_path>/release'` and potentially leaving `current`
+  pointing at another run's release. Now:
+  - Flows start with **`klytron:deploy:smart_unlock`** instead: it auto-clears
+    only a provably stale lock (older than the new `klytron_stale_lock_minutes`
+    setting, default `120`, `0` disables auto-clearing) and otherwise aborts
+    fast with an actionable message before touching anything.
+  - **`klytron:deploy:verify_staging`** runs immediately before `deploy:symlink`
+    in every flow (framework-agnostic, Laravel full/minimal/api, PHP
+    complete/minimal/flow variants, Yii2 standard/minimal/with-backup) and stops
+    with a clear explanation if the staging symlink vanished mid-flight.
+  - The failure hook is now **`klytron:deploy:failed_unlock_guard`** (wired via
+    `klytron:deploy:mark_lock_acquired` after `deploy:lock`): it releases the
+    lock only when *this* run acquired it, so an aborted pre-lock run can never
+    erase a concurrent deployer's lock.
+- **Sanitization**: no functional change — hosting-panel names in comments,
+  docs and the changelog were generalized to neutral wording
+  ("panel-managed FCGI (php-cgi)"), and a stale test guide entry was aligned
+  with the shipped `KlytronSqliteSetter` command name.
+
 ## [1.3.2] - 2026-10-22
 
 ### Fixed
@@ -178,7 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`klytron:opcache:reset`**: Token-gated one-shot public script + curl against the live domain (and localhost `Host` header) so **Virtualmin php-cgi FCGI** OPcache is cleared. Falls back to recycling `php-cgi{X.Y}` workers when HTTP reset is inconclusive.
+- **`klytron:opcache:reset`**: Token-gated one-shot public script + curl against the live domain (and localhost `Host` header) so **panel-managed php-cgi FCGI** OPcache is cleared. Falls back to recycling `php-cgi{X.Y}` workers when HTTP reset is inconclusive.
 - **`klytron:fpm:reload` enhancement**: Still reloads systemd php-fpm, then always invokes `klytron:opcache:reset` (disable with `set('skip_opcache_reset', true)`).
 
 ## [1.1.4] - 2026-10-02

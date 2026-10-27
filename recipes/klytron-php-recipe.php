@@ -37,7 +37,7 @@ if (!has('shared_dir_path')) {
 task('klytron:php:deploy:complete', [
     'klytron:deploy:start_timer',
     'klytron:validate:basic',                    // Framework-agnostic validation
-    'deploy:unlock',
+    'klytron:deploy:smart_unlock',               // Guarded unlock: only clears stale locks
     'klytron:deploy:fix_repo',
     'klytron:deploy:prepare:complete',           // Framework-agnostic preparation
     'deploy:setup',
@@ -49,6 +49,7 @@ task('klytron:php:deploy:complete', [
     'klytron:deploy:env',
     'deploy:vendors',
     'deploy:writable',
+    'klytron:deploy:verify_staging',             // Stop clearly if a concurrent deploy took the staging symlink
     'deploy:symlink',
     'klytron:deploy:finalize:complete',          // Framework-agnostic finalization
     'deploy:unlock',
@@ -62,13 +63,14 @@ task('klytron:php:deploy:complete', [
  */
 task('klytron:php:deploy:minimal', [
     'klytron:deploy:start_timer',
-    'deploy:unlock',
+    'klytron:deploy:smart_unlock',               // Guarded unlock: only clears stale locks
     'deploy:setup',
     'deploy:lock',
     'deploy:release',
     'deploy:update_code',
     'deploy:shared',
     'deploy:writable',
+    'klytron:deploy:verify_staging',             // Stop clearly if a concurrent deploy took the staging symlink
     'deploy:symlink',
     'klytron:deploy:create:server_symlink',
     'deploy:unlock',
@@ -130,7 +132,7 @@ function klytron_php_deploy_flow(): array {
     return [
         'klytron:deploy:start_timer',
         'klytron:validate:basic',                    // Framework-agnostic validation
-        'deploy:unlock',
+        'klytron:deploy:smart_unlock',               // Guarded unlock: only clears stale locks
         'klytron:deploy:prepare:complete',           // Framework-agnostic preparation
         'deploy:setup',
         'deploy:lock',
@@ -142,6 +144,7 @@ function klytron_php_deploy_flow(): array {
         'klytron:deploy:env',
         'deploy:vendors',
         'deploy:writable',
+        'klytron:deploy:verify_staging',             // Stop clearly if a concurrent deploy took the staging symlink
         'deploy:symlink',
         'klytron:deploy:finalize:complete',          // Framework-agnostic finalization
         'deploy:unlock',
@@ -157,13 +160,14 @@ function klytron_php_deploy_flow(): array {
 function klytron_php_deploy_flow_minimal(): array {
     return [
         'klytron:deploy:start_timer',
-        'deploy:unlock',
+        'klytron:deploy:smart_unlock',               // Guarded unlock: only clears stale locks
         'deploy:setup',
         'deploy:lock',
         'deploy:release',
         'deploy:update_code',
         'deploy:shared',
         'deploy:writable',
+        'klytron:deploy:verify_staging',             // Stop clearly if a concurrent deploy took the staging symlink
         'deploy:symlink',
         'klytron:deploy:create:server_symlink',
         'deploy:unlock',

@@ -120,7 +120,7 @@ klytron_configure_writable_dirs([
 
 task('deploy', [
     'klytron:deploy:start_timer',
-    'deploy:unlock',
+    'klytron:deploy:smart_unlock',             // Guarded unlock: only clears stale locks
     'klytron:deploy:check_pushed',
     'klytron:validate:basic',
     'deploy:setup',
@@ -135,6 +135,7 @@ task('deploy', [
     'deploy:writable',
     'klytron:laravel:deploy:cache:complete',
     'klytron:laravel:filament:assets',
+    'klytron:deploy:verify_staging',           // Stop clearly if a concurrent deploy took the staging symlink
     'deploy:symlink',
     'klytron:laravel:deploy:finalize:complete',
     'deploy:unlock',
@@ -144,6 +145,44 @@ task('deploy', [
     'klytron:deploy:end_timer',
 ])->desc('Deploy Laravel application');
 ```
+
+## Concurrent Deploy Protection
+
+Every kit deploy flow is protected against overlapping deployments. The whole
+pipeline stages code through a single staging symlink (`{{deploy_path}}/release`)
+that `deploy:release` creates and `deploy:symlink` atomically moves onto
+`current` — so two deploys running at once corrupt each other's staging state
+(the slower run fails with `mv: cannot stat …/release`) and can even leave
+`current` pointing at the wrong release.
+
+Three guard tasks keep Deployer's remote lock (`{{deploy_path}}/.dep/deploy.lock`)
+honest:
+
+| Task | Role |
+|---|---|
+| `klytron:deploy:smart_unlock` | Runs where flows used to run a raw `deploy:unlock`. It only auto-clears a **provably stale** lock (older than `klytron_stale_lock_minutes`, default `120`); a **live** lock aborts the run with an actionable message before anything is touched. |
+| `klytron:deploy:verify_staging` | Runs immediately before `deploy:symlink`. If the staging symlink vanished (a concurrent deploy moved it), the run stops with a clear explanation — never the bare `mv` failure. |
+| `klytron:deploy:failed_unlock_guard` | Failure hook that releases the lock **only when this run acquired it**, so an aborted pre-lock run can never erase a concurrent deploy's lock. |
+
+Configuration:
+
+```php
+// Minutes a deploy.lock may sit untouched before a new deploy may clear it.
+// Default: 120. Set 0 to never auto-clear (operator must run deploy:unlock).
+set('klytron_stale_lock_minutes', 120);
+```
+
+If a run aborts because another deploy is live:
+
+```bash
+# 1. Wait for the other deploy to finish, or verify it is dead, then:
+vendor/bin/dep deploy:unlock
+# 2. Re-run the deploy.
+```
+
+> Set `klytron_stale_lock_minutes` to `0` on CI systems where a killed run
+> cannot leave a live deploy behind, and manual unlocking must always be
+> explicit.
 
 ### 2. Preview or Dry-Run Plan (CI/CD)
 
