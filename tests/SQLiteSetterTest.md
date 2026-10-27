@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide helps you test the enhanced `LaweitechSqliteSetter` command that now derives database filenames from configuration or app name instead of using hardcoded values.
+This guide helps you test the enhanced `KlytronSqliteSetter` command that now derives database filenames from configuration or app name instead of using hardcoded values.
 
 ## Test Scenarios
 

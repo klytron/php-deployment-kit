@@ -620,7 +620,7 @@ function klytron_yii2_deploy_flow(): array
         'klytron:validate:deploy_path_parent',  // Validate deploy_path_parent before proceeding
         'klytron:yii2:deploy:info',
         'klytron:yii2:deploy:configure:interactive',
-        'deploy:unlock',
+        'klytron:deploy:smart_unlock',  // Guarded unlock: only clears stale locks
         'deploy:info',
         'deploy:setup',
         'deploy:lock',
@@ -641,6 +641,7 @@ function klytron_yii2_deploy_flow(): array
         'klytron:yii2:maintenance_enable',
         'klytron:yii2:copy_console',
         'klytron:yii2:migrate',
+        'klytron:deploy:verify_staging',  // Stop clearly if a concurrent deploy took the staging symlink
         'deploy:symlink',
         'klytron:yii2:optimize',
         'klytron:yii2:create_symlinks',
@@ -665,7 +666,7 @@ function klytron_yii2_deploy_flow_minimal(): array
         'klytron:deploy:start_timer',
         'klytron:validate:deploy_path_parent',  // Validate deploy_path_parent before proceeding
         'klytron:yii2:deploy:info',
-        'deploy:unlock',
+        'klytron:deploy:smart_unlock',  // Guarded unlock: only clears stale locks
         'deploy:info',
         'deploy:setup',
         'deploy:lock',
@@ -679,6 +680,7 @@ function klytron_yii2_deploy_flow_minimal(): array
         'klytron:yii2:maintenance_enable',
         'klytron:yii2:copy_console',
         'klytron:yii2:migrate',
+        'klytron:deploy:verify_staging',  // Stop clearly if a concurrent deploy took the staging symlink
         'deploy:symlink',
         'klytron:yii2:optimize',
         'klytron:yii2:create_symlinks',
@@ -702,7 +704,7 @@ function klytron_yii2_deploy_flow_with_backup(): array
         'klytron:validate:deploy_path_parent',  // Validate deploy_path_parent before proceeding
         'klytron:yii2:deploy:info',
         'klytron:yii2:deploy:configure:interactive',
-        'deploy:unlock',
+        'klytron:deploy:smart_unlock',  // Guarded unlock: only clears stale locks
         'deploy:info',
         'deploy:setup',
         'deploy:lock',
@@ -723,6 +725,7 @@ function klytron_yii2_deploy_flow_with_backup(): array
         'klytron:yii2:maintenance_enable',
         'klytron:yii2:copy_console',
         'klytron:yii2:migrate',
+        'klytron:deploy:verify_staging',  // Stop clearly if a concurrent deploy took the staging symlink
         'deploy:symlink',
         'klytron:yii2:optimize',
         'klytron:yii2:create_symlinks',

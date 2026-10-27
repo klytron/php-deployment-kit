@@ -97,7 +97,7 @@ set('application_public_html_aliases', [
 Notes:
 - Aliases are processed by the framework‑agnostic task `klytron:deploy:create:server_symlink_aliases` as part of the finalize step.
 - Existing directories at alias paths are backed up to a timestamped folder; existing files/symlinks are removed before creation.
-- Symlink ownership priority: per‑alias `user:group` → host `http_user:http_group` → parent directory owner:group (Virtualmin suexec‑friendly).
+- Symlink ownership priority: per‑alias `user:group` → host `http_user:http_group` → parent directory owner:group (hosting‑panel suexec‑friendly).
 - The source of the symlink is `public_dir_path`. Recipes set this automatically (e.g., Laravel sets `{{deploy_path}}/current/public`). For custom stacks, set it explicitly:
 
 ```php
@@ -644,7 +644,7 @@ All keys are plain Deployer config — set them with native `set()`:
 | `temp_dir` | `sys_get_temp_dir()` | Staging dir for the masked `.env` download during Vite builds |
 
 ```php
-set('skip_opcache_reset', true);        // systemd-only hosts, no Virtualmin FCGI
+set('skip_opcache_reset', true);        // systemd-only hosts, no panel-managed FCGI
 set('health_check_timeout', 30);
 set('health_check_expected_code', 200);
 set('plan_target_task', 'deploy');
@@ -737,7 +737,7 @@ set('server_config_files', [
 
 task('deploy', [
     'klytron:deploy:start_timer',
-    'deploy:unlock',
+    'klytron:deploy:smart_unlock',   // Guarded unlock: only clears stale locks
     'klytron:deploy:fix_repo',
     'klytron:laravel:deploy:prepare:complete',
     'deploy:setup', 'deploy:lock', 'deploy:release', 'deploy:update_code',
@@ -748,6 +748,7 @@ task('deploy', [
     'klytron:laravel:deploy:database:complete',
     'deploy:writable',
     'klytron:laravel:deploy:cache:complete',
+    'klytron:deploy:verify_staging',   // Stop clearly if a concurrent deploy took the staging symlink
     'deploy:symlink',
     'klytron:laravel:deploy:finalize:complete',
     'klytron:assets:map', 'klytron:assets:cleanup',
@@ -763,6 +764,13 @@ task('deploy', [
 // Local environment file (.env.production) is validated automatically by klytron:validate:basic
 after('deploy:shared', 'klytron:server:deploy:configs');
 ```
+
+**Locking & concurrency:** flows start with `klytron:deploy:smart_unlock`
+instead of a raw `deploy:unlock` — it auto-clears only a lock older than
+`klytron_stale_lock_minutes` (default `120`; `0` disables auto-clearing) and
+aborts otherwise. `klytron:deploy:verify_staging` sits before `deploy:symlink`,
+and the failure hook `klytron:deploy:failed_unlock_guard` only releases a lock
+the failed run itself acquired. See "Concurrent Deploy Protection" in README.md.
 
 ## 🎯 Configuration Best Practices
 

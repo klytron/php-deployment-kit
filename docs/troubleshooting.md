@@ -463,13 +463,18 @@ set('env_file_remote', '.env');
    - *Previous cause*: Permissions commands using `find ... -exec sudo chmod g+s {} \;`, or recursive chown across `node_modules`, or multi-SSH Laravel storage/cache steps that stall and leave `deploy.lock`.
    - *Fix (v1.1.5)*: `klytron:deploy:access_permissions` batches updates with setgid octal modes, **prunes `node_modules`/`.git`/`.npm-cache`**, and runs as one remote script. `klytron:deploy:laravel:access_permissions` uses timeouts and a single SSH round-trip.
 
-5. **Stale CSS/JS hashes after deploy (Virtualmin)**:
-   - *Cause*: `systemctl reload php-fpm` does not clear OPcache for Virtualmin `php-cgi` FCGI workers.
+5. **Stale CSS/JS hashes after deploy (panel-managed FCGI)**:
+   - *Cause*: `systemctl reload php-fpm` does not clear OPcache for panel-managed `php-cgi` FCGI workers.
    - *Fix (v1.1.5)*: `klytron:fpm:reload` also runs `klytron:opcache:reset` against the live domain SAPI.
 
 6. **Pruning Unnecessary Tasks**:
    - Remove database migration tasks if your project has `'database' => 'none'`.
    - Remove sitemap or image optimization tasks if your project does not generate them.
+
+7. **Concurrent / overlapping deploys (`mv: cannot stat …/release`)**:
+   - *Symptom*: A deploy fails with `mv: cannot stat '<deploy_path>/release'`, or aborts with "Another deploy appears to be running".
+   - *Cause*: Two deploys ran at once. The pipeline stages code through the single staging symlink `{{deploy_path}}/release`, which the atomic switch (`deploy:symlink`) consumes.
+   - *Fix (v1.3.3)*: Flows start with `klytron:deploy:smart_unlock` (auto-clears only locks older than `klytron_stale_lock_minutes`, refuses live locks), `klytron:deploy:verify_staging` sits before the switch, and the failure hook only releases a lock the failed run itself acquired. If a live lock blocks you: wait for (or verify) the other deploy, run `vendor/bin/dep deploy:unlock`, then re-run.
 
 **Expected Speed with v1.1.0:**
 - Routine code updates: **30–60 seconds** total deployment time.

@@ -535,7 +535,7 @@ task('deploy', klytron_deploy_flow())->desc('Deploy project');
 The flow executes the following tasks in order:
 1. `klytron:deploy:start_timer`
 2. `klytron:validate:basic`
-3. `deploy:unlock`
+3. `klytron:deploy:smart_unlock` — guarded unlock: only clears stale locks
 4. `klytron:deploy:fix_repo`
 5. `klytron:deploy:prepare:complete`
 6. `deploy:setup`
@@ -547,12 +547,13 @@ The flow executes the following tasks in order:
 12. `deploy:env`
 13. `deploy:vendors`
 14. `deploy:writable`
-15. `deploy:symlink`
-16. `klytron:deploy:finalize:complete`
-17. `deploy:unlock`
-18. `deploy:cleanup`
-19. `klytron:deploy:notify:complete`
-20. `klytron:deploy:end_timer`
+15. `klytron:deploy:verify_staging` — aborts clearly if a concurrent deploy took the staging symlink
+16. `deploy:symlink`
+17. `klytron:deploy:finalize:complete`
+18. `deploy:unlock`
+19. `deploy:cleanup`
+20. `klytron:deploy:notify:complete`
+21. `klytron:deploy:end_timer`
 
 ### `klytron_deploy_flow_minimal(): array`
 *(Deprecated)* Alias for `klytron_deploy_flow()`. Use `klytron_deploy_flow()` directly.

@@ -1035,7 +1035,7 @@ if (!get('klytron_deployer_loaded', false)) {
         return [
             'klytron:deploy:start_timer',
             'klytron:validate:basic',                    // Framework-agnostic validation
-            'deploy:unlock',
+            'klytron:deploy:smart_unlock',               // Guarded unlock: only clears stale locks
             'klytron:deploy:fix_repo',
             'klytron:deploy:prepare:complete',           // Framework-agnostic preparation
             'deploy:setup',
@@ -1047,6 +1047,7 @@ if (!get('klytron_deployer_loaded', false)) {
             'klytron:deploy:env',
             'deploy:vendors',
             'deploy:writable',
+            'klytron:deploy:verify_staging',             // Stop clearly if a concurrent deploy took the staging symlink
             'deploy:symlink',
             'klytron:deploy:finalize:complete',          // Framework-agnostic finalization
             'deploy:unlock',

@@ -1718,7 +1718,7 @@ function klytron_laravel_deploy_flow(): array {
         'klytron:deploy:start_timer',
         'klytron:laravel:deploy:display:info',           // Group task: validation + info display
         'klytron:laravel:deploy:configure:interactive',  // Group task: validation + interactive config
-        'deploy:unlock',
+        'klytron:deploy:smart_unlock',                   // Guarded unlock: only clears stale locks
         'klytron:laravel:backup:pre_deploy',             // Pre-deployment backup (optional)
         'klytron:laravel:deploy:prepare:complete',       // Group task: confirmation + backup
         'deploy:setup',
@@ -1736,6 +1736,7 @@ function klytron_laravel_deploy_flow(): array {
         'klytron:laravel:deploy:passport:install',
         'deploy:writable',
         'klytron:laravel:deploy:cache:complete',         // Group task: cache clearing + optimization
+        'klytron:deploy:verify_staging',                 // Stop clearly if a concurrent deploy took the staging symlink
         'deploy:symlink',
         'klytron:laravel:deploy:finalize:complete',      // Group task: symlink + permissions + storage
         'deploy:unlock',
@@ -1754,7 +1755,7 @@ function klytron_laravel_deploy_flow_minimal(): array {
     return [
         'klytron:deploy:start_timer',
         'klytron:laravel:init:questions',
-        'deploy:unlock',
+        'klytron:deploy:smart_unlock',                   // Guarded unlock: only clears stale locks
         'deploy:info',
         'klytron:laravel:deploy:backup:create',
         'deploy:setup',
@@ -1767,6 +1768,7 @@ function klytron_laravel_deploy_flow_minimal(): array {
         'deploy:vendors',
         'klytron:laravel:deploy:cache:clear:all',
         'deploy:writable',
+        'klytron:deploy:verify_staging',                 // Stop clearly if a concurrent deploy took the staging symlink
         'deploy:symlink',
         'klytron:deploy:create:server_symlink',
         'klytron:deploy:access_permissions',
@@ -1785,7 +1787,7 @@ function klytron_laravel_deploy_flow_api(): array {
         'klytron:deploy:start_timer',
         'klytron:laravel:deploy:display:info',
         'klytron:laravel:deploy:configure:interactive',
-        'deploy:unlock',
+        'klytron:deploy:smart_unlock',                   // Guarded unlock: only clears stale locks
         'klytron:laravel:deploy:prepare:complete',
         'deploy:setup',
         'deploy:lock',
@@ -1801,6 +1803,7 @@ function klytron_laravel_deploy_flow_api(): array {
         'klytron:laravel:deploy:passport:install',       // Important for API authentication
         'deploy:writable',
         'klytron:laravel:deploy:cache:complete',
+        'klytron:deploy:verify_staging',                 // Stop clearly if a concurrent deploy took the staging symlink
         'deploy:symlink',
         'klytron:laravel:deploy:finalize:complete',
         'deploy:unlock',

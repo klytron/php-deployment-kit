@@ -202,7 +202,7 @@ set('application_public_html_aliases', [
 - For each alias path, ensures parent exists
 - Removes existing symlink/file; backs up existing directory
 - Creates symlink: `alias_public_html` → `public_dir_path`
-- Sets symlink ownership priority: per‑alias `user:group` → host `http_user:http_group` → parent owner (Virtualmin suexec friendly)
+- Sets symlink ownership priority: per‑alias `user:group` → host `http_user:http_group` → parent owner (hosting-panel suexec friendly)
 
 Tip: You can set host defaults via `klytron_configure_host('host', ['http_user' => 'klytron', 'http_group' => 'klytron'])`.
 
@@ -281,6 +281,38 @@ vendor/bin/dep deploy:cleanup
 - Remove old releases beyond keep limit
 - Clean up temporary files
 - Free up disk space
+
+## 🎯 Concurrent Deploy Guard Tasks
+
+### `klytron:deploy:smart_unlock`
+
+Guarded replacement for a raw flow-start `deploy:unlock`.
+
+```bash
+vendor/bin/dep klytron:deploy:smart_unlock
+```
+
+**What it does:**
+- No lock present → proceed silently
+- Lock older than `klytron_stale_lock_minutes` (default `120`; `0` disables auto-clearing) → clears it with a visible warning
+- Live lock held by another deploy → **aborts** with an actionable message (wait, or run `deploy:unlock` manually) before anything is touched
+
+Stale detection is age-based (`stat -c %Y` on the lock file), so a surviving lock from a killed run is cleared automatically while a genuinely concurrent deploy stops the new run.
+
+### `klytron:deploy:verify_staging`
+
+Pre-switch safety check, wired directly before `deploy:symlink` in every flow.
+
+**What it does:**
+- If the staging symlink `{{deploy_path}}/release` is missing (a concurrent deploy moved it onto `current`), aborts with an explanation that nothing was switched for this run — instead of Deployer's bare `mv: cannot stat …/release`
+
+### `klytron:deploy:failed_unlock_guard` (+ `klytron:deploy:mark_lock_acquired`)
+
+Failure-hook replacement for the old unconditional failure unlock.
+
+**What it does:**
+- `deploy:lock` registers ownership (`klytron:deploy:mark_lock_acquired`)
+- On failure, the lock is released **only if this run acquired it**; a foreign lock (from a concurrent deployer) is left untouched with a warning
 
 ## 🎯 Framework-Specific Tasks
 
@@ -756,7 +788,7 @@ standalone or wherever the flow needs them.
 Why `klytron:opcache:reset` reads `application_public_domain`/`application_public_url` only:
 it never reads Deployer's provision `domain` key because that key is an `ask()`
 closure — touching it in a non-interactive deploy blocks forever on a "Domain:"
-prompt. The reset curls the live site SAPI (Virtualmin `fcgi-bin/phpX.Y.fcgi` /
+prompt. The reset curls the live site SAPI (panel-managed `fcgi-bin/phpX.Y.fcgi` /
 `php-cgi` workers are untouched by a systemd php-fpm reload) with a short-lived
 token-gated script, then deletes it. Disable with `set('skip_opcache_reset', true)`.
 
@@ -815,7 +847,7 @@ Reloads the PHP-FPM service (e.g. `systemctl reload php8.3-fpm`) and then runs `
 
 ### `klytron:opcache:reset`
 
-Clears OPcache through the **live site SAPI** (required on Virtualmin hosts that use `fcgi-bin/phpX.Y.fcgi` / `php-cgi`, where systemd php-fpm reload does not touch the running CGI workers). Writes a short-lived token-gated script under `public/`, curls the domain (and localhost with `Host`), then deletes the script. Set `skip_opcache_reset` to `true` to disable.
+Clears OPcache through the **live site SAPI** (required on panel-managed hosts that use `fcgi-bin/phpX.Y.fcgi` / `php-cgi`, where systemd php-fpm reload does not touch the running CGI workers). Writes a short-lived token-gated script under `public/`, curls the domain (and localhost with `Host`), then deletes the script. Set `skip_opcache_reset` to `true` to disable.
 
 ### `klytron:deploy:clean_repo`
 
