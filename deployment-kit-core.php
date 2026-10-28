@@ -929,6 +929,9 @@ if (!get('klytron_deployer_loaded', false)) {
             'supports_filament' => null, // null = auto-detect, bool = explicit
             'supports_storage_link' => true,
             'supports_sitemap' => false,
+            'seeder_classes' => [],       // opt-in: artisan db:seed --class list run on deploy
+            'scheduler_enabled' => false, // opt-in: install schedule:run crontab line
+            'scheduler_cron' => '* * * * *',
             'verify_fonts' => false,
             'cleanup_assets' => true,
             'optimize_images' => false,
@@ -962,6 +965,9 @@ if (!get('klytron_deployer_loaded', false)) {
         set('supports_filament', $config['supports_filament']);
         set('supports_storage_link', $config['supports_storage_link']);
         set('supports_sitemap', $config['supports_sitemap']);
+        set('seeder_classes', $config['seeder_classes']);
+        set('scheduler_enabled', $config['scheduler_enabled']);
+        set('scheduler_cron', $config['scheduler_cron']);
         set('verify_fonts', $config['verify_fonts']);
         set('cleanup_assets', $config['cleanup_assets']);
         set('optimize_images', $config['optimize_images']);
@@ -973,6 +979,30 @@ if (!get('klytron_deployer_loaded', false)) {
         } else {
             set('env_encryption_environments', []);
         }
+    }
+
+    /**
+     * Configure the Laravel scheduler crontab install (opt-in).
+     *
+     * Calling this enables the `klytron:scheduler:install` task, which installs
+     * a single idempotent `artisan schedule:run` crontab line. Legacy/unmarked
+     * `artisan schedule:run` lines are removed first, so per-project cron
+     * snippets can be retired safely once a project adopts this.
+     *
+     *   klytron_configure_scheduler(['cron' => '* * * * *']);
+     *
+     * @param array $config 'enabled' (default true), 'cron' (default '* * * * *')
+     */
+    function klytron_configure_scheduler(array $config = []): void {
+        $defaults = [
+            'enabled' => true,
+            'cron' => '* * * * *',
+        ];
+
+        $config = array_merge($defaults, $config);
+
+        set('scheduler_enabled', $config['enabled']);
+        set('scheduler_cron', $config['cron']);
     }
 
     /**

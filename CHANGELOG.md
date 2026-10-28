@@ -5,6 +5,30 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-10-28
+
+### Added
+
+- **`klytron:scheduler:install` — idempotent Laravel scheduler crontab install
+  (opt-in)**: installs a single `artisan schedule:run` crontab line so a
+  deploy-driven migration can retire per-project cron snippets. Every run
+  removes ALL existing crontab lines containing `artisan schedule:run`
+  (legacy unmarked lines and the previously installed marked line) and then
+  appends exactly one marked (`# klytron-scheduler`) line — this prevents the
+  double-scheduler failure mode where an old line survives alongside the new
+  one and both fire every minute. The cron expression is emitted inside shell
+  single quotes so it can never be glob-expanded; the line uses `{{bin/php}}`
+  (honours `klytron_set_php_version`) and `{{current_path}}` so it survives
+  release rotations. Task is a no-op unless the project calls
+  `klytron_configure_scheduler(['cron' => '* * * * *'])` (new helper;
+  `'scheduler_enabled' => false` and `'scheduler_cron' => '* * * * *'` are new
+  `klytron_configure_project` defaults).
+- **`klytron:db:seed` — configured-seeder deployment task (opt-in)**: runs
+  `artisan db:seed --class=... --force` for every class listed in the new
+  `'seeder_classes' => []` `klytron_configure_project` default. Skips with a
+  status note when the list is empty, so existing projects that never set it
+  are unaffected.
+
 ## [1.3.3] - 2026-10-27
 
 ### Fixed

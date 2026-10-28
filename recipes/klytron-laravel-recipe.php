@@ -2400,3 +2400,74 @@ task('klytron:laravel:check:web-php', function () {
     warning('  is that the DOMAIN is still on the old one: raise it to the version');
     warning('  listed above, reload FPM, and re-check.');
 })->desc('Warns when the domain web tier serves an older PHP than required');
+
+///////////////////////////////////////////////////////////////////////////////
+// SCHEDULER & SEEDER (opt-in, config-gated)
+///////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Install a single idempotent `artisan schedule:run` crontab line.
+ *
+ * Skips unless the project opted in via
+ *   klytron_configure_scheduler(['cron' => '* * * * *']);
+ * (or 'scheduler_enabled' => true in klytron_configure_project).
+ *
+ * Every deployment removes ALL existing crontab lines containing
+ * `artisan schedule:run` (legacy unmarked ones and the previously installed
+ * marked line), then appends exactly one new marked line. This prevents the
+ * double-scheduler failure mode where an old unmarked line survives a
+ * migration and both run every minute.
+ *
+ * The cron expression lives inside single quotes in the shell command so the
+ * server shell never glob-expands the asterisks.
+ *
+ * Uses {{bin/php}} (resolves via klytron_set_php_version) and
+ * {{current_path}} so the line survives release rotations.
+ */
+task('klytron:scheduler:install', function () {
+    if (!get('scheduler_enabled', false)) {
+        info('⏭️ Scheduler not enabled (klytron_configure_scheduler), skipping crontab install.');
+        return;
+    }
+
+    $cron = get('scheduler_cron', '* * * * *');
+
+    run(
+        "(crontab -l 2>/dev/null | grep -v 'artisan schedule:run' || true; "
+        . "echo '" . $cron . " cd {{current_path}} && {{bin/php}} artisan schedule:run >> /dev/null 2>&1 # klytron-scheduler') "
+        . "| crontab -"
+    );
+
+    $installed = trim((string) run("crontab -l 2>/dev/null | grep 'klytron-scheduler' || true"));
+    info('Scheduler cron ensured (single marked line): ' . ($installed !== '' ? $installed : '(install failed to verify!)'));
+    if ($installed === '') {
+        warning('⚠ The scheduler crontab line was not found after install — verify with "crontab -l".');
+    }
+})->desc('Install a single idempotent artisan schedule:run crontab line (opt-in)');
+
+/**
+ * Run the configured Laravel seeders on the new release.
+ *
+ * Skips when 'seeder_classes' is empty (default), so projects that never
+ * configure it are unaffected:
+ *
+ *   klytron_configure_project([
+ *       'seeder_classes' => ['TreatmentCatalogSeeder'],
+ *   ]);
+ *
+ * Each class runs as
+ *   {{bin/php}} {{release_or_current_path}}/artisan db:seed --class=... --force
+ */
+task('klytron:db:seed', function () {
+    $classes = get('seeder_classes', []);
+
+    if (empty($classes)) {
+        info('ℹ️ No seeder_classes configured, skipping db:seed.');
+        return;
+    }
+
+    foreach ($classes as $class) {
+        run('{{bin/php}} {{release_or_current_path}}/artisan db:seed --class=' . escapeshellarg($class) . ' --force');
+        info("✅ Seeded $class");
+    }
+})->desc('Run configured seeder classes on the release (seeder_classes)');
