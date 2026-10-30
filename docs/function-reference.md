@@ -243,8 +243,7 @@ Configure shared directories for the project.
 klytron_configure_shared_dirs([
     'storage',
     'public/uploads',
-    'public/storage',
-    'bootstrap/cache',
+    // Do not share bootstrap/cache or public/storage (Laravel)
 ]);
 ```
 

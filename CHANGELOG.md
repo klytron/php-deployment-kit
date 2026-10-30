@@ -5,6 +5,25 @@ All notable changes to the PHP Deployment Kit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-10-30
+
+### Fixed
+
+- **`klytron:scheduler:install` installs under `http_user`**: Deploy SSH is
+  often `root`, so the previous `crontab -` wrote root's crontab. Artisan
+  `schedule:run` then created root-owned file-cache dirs; Virtualmin/suexec
+  PHP (`http_user`) hit `Permission denied` on `Cache::remember` (Synergy
+  `/book` 500, 30 Oct 2026). When `http_user` is set, the task now strips
+  legacy root `schedule:run` lines and installs the marked line via
+  `crontab -u {http_user}`.
+- **Safer Laravel shared-dir defaults**: Removed `bootstrap/cache` and
+  `public/storage` from default `shared_dirs` (and `public/storage` from
+  default `writable_dirs`). Shared `bootstrap/cache` poisons absolute paths
+  across releases after `config:cache` (klytron.com incident same day);
+  shared `public/storage` collides with `artisan storage:link`. Projects
+  that call `klytron_configure_shared_dirs([...])` already replace these
+  defaults — update those lists to match.
+
 ## [1.4.0] - 2026-10-28
 
 ### Added

@@ -459,12 +459,12 @@ klytron_configure_shared_dirs(array $directories);
 
 **Example:**
 ```php
+// Laravel: share only persistent data. Do NOT share bootstrap/cache
+// (config:cache bakes absolute release paths) or public/storage
+// (must remain an artisan storage:link into storage/app/public).
 klytron_configure_shared_dirs([
     'storage',                 // Application storage
-    'public/uploads',          // User uploads
-    'public/storage',          // Public storage
-    'bootstrap/cache',         // Bootstrap cache
-    'logs',                    // Application logs
+    'public/uploads',          // User uploads (if used)
 ]);
 ```
 
@@ -724,11 +724,11 @@ klytron_configure_host('myapp.com', [
 ]);
 
 klytron_configure_shared_files(['.env']);
-klytron_configure_shared_dirs(['storage', 'public/storage', 'bootstrap/cache']);
+klytron_configure_shared_dirs(['storage']); // bootstrap/cache + public/storage must NOT be shared
 klytron_configure_writable_dirs([
     'bootstrap/cache', 'storage', 'storage/app', 'storage/app/public',
     'storage/framework', 'storage/framework/cache', 'storage/framework/sessions',
-    'storage/framework/views', 'storage/logs', 'public/storage',
+    'storage/framework/views', 'storage/logs',
 ]);
 
 set('server_config_files', [

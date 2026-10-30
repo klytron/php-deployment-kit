@@ -2431,19 +2431,32 @@ task('klytron:scheduler:install', function () {
     }
 
     $cron = get('scheduler_cron', '* * * * *');
+    // Deploy SSH user is often root; installing into root's crontab makes
+    // artisan write file-cache dirs as root. Virtualmin/suexec PHP then
+    // cannot write those dirs (permission denied → public 500s). Prefer
+    // http_user when set; fall back to root crontab only when unset.
+    $httpUser = get('http_user', '');
+    $cronUserFlag = $httpUser !== '' ? "-u {$httpUser} " : '';
+    $line = $cron . ' cd {{current_path}} && {{bin/php}} artisan schedule:run >> /dev/null 2>&1 # klytron-scheduler';
+
+    // Always strip legacy root schedule:run lines when we install under http_user.
+    if ($httpUser !== '') {
+        run("(crontab -l 2>/dev/null | grep -v 'artisan schedule:run' || true) | crontab -");
+    }
 
     run(
-        "(crontab -l 2>/dev/null | grep -v 'artisan schedule:run' || true; "
-        . "echo '" . $cron . " cd {{current_path}} && {{bin/php}} artisan schedule:run >> /dev/null 2>&1 # klytron-scheduler') "
-        . "| crontab -"
+        "(crontab {$cronUserFlag}-l 2>/dev/null | grep -v 'artisan schedule:run' || true; "
+        . "echo '{$line}') "
+        . "| crontab {$cronUserFlag}-"
     );
 
-    $installed = trim((string) run("crontab -l 2>/dev/null | grep 'klytron-scheduler' || true"));
-    info('Scheduler cron ensured (single marked line): ' . ($installed !== '' ? $installed : '(install failed to verify!)'));
+    $installed = trim((string) run("crontab {$cronUserFlag}-l 2>/dev/null | grep 'klytron-scheduler' || true"));
+    $where = $httpUser !== '' ? $httpUser : 'root/current-ssh-user';
+    info("Scheduler cron ensured under {$where} (single marked line): " . ($installed !== '' ? $installed : '(install failed to verify!)'));
     if ($installed === '') {
-        warning('⚠ The scheduler crontab line was not found after install — verify with "crontab -l".');
+        warning("⚠ The scheduler crontab line was not found after install — verify with \"crontab {$cronUserFlag}-l\".");
     }
-})->desc('Install a single idempotent artisan schedule:run crontab line (opt-in)');
+})->desc('Install a single idempotent artisan schedule:run crontab line (opt-in, under http_user)');
 
 /**
  * Run the configured Laravel seeders on the new release.

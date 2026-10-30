@@ -185,17 +185,19 @@ if (!get('klytron_deployer_loaded', false)) {
         'storage/oauth-public.key',  // Laravel Passport public key
     ]);
     
-    // Shared directories between releases (persistent data)
+    // Shared directories between releases (persistent data).
+    // Do NOT share bootstrap/cache: artisan config:cache bakes absolute
+    // release paths (cross-release 500s — klytron.com 2026-10-30).
+    // Do NOT share public/storage: that must remain an artisan storage:link
+    // into storage/app/public (sharing creates an empty dir collision).
     add('shared_dirs', [
         'storage',                 // Application storage (logs, cache, sessions)
         'public/uploads',          // User uploaded files
-        'public/storage',          // Public storage symlink target
-        'bootstrap/cache',         // Bootstrap cache (for performance)
     ]);
     
     // Writable directories (ensure proper permissions)
     add('writable_dirs', [
-        'bootstrap/cache',         // Bootstrap cache
+        'bootstrap/cache',         // Per-release bootstrap cache (not shared)
         'storage',                 // Storage directory and subdirectories
         'storage/app',             // Application files
         'storage/app/public',      // Public storage
@@ -205,7 +207,6 @@ if (!get('klytron_deployer_loaded', false)) {
         'storage/framework/views', // Compiled views
         'storage/logs',            // Application logs
         'public/uploads',          // User uploads
-        'public/storage',          // Public storage symlink
     ]);
     
     ///////////////////////////////////////////////////////////////////////////
